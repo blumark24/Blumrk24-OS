@@ -1,11 +1,7 @@
 {
   "name": "smart-hsr-api",
   "version": "1.0.0",
-  "main": "api/analyze.js",
   "type": "module",
-  "scripts": {
-    "start": "node api/analyze.js"
-  },
   "dependencies": {
     "openai": "^4.0.0"
   }
