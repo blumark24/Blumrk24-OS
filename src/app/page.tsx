@@ -7,17 +7,25 @@ import {
   Tooltip, ResponsiveContainer, Legend
 } from "recharts";
 import {
-  Users, TrendingUp, CheckCircle2, UserCheck,
-  ArrowUpRight, ArrowDownRight, Star, MoreHorizontal,
-  Activity, Clock, DollarSign, MessageCircle
+  Users, CheckCircle2, ArrowUpRight, XCircle,
+  DollarSign, Activity, Clock, UserCheck, Star
 } from "lucide-react";
-import { mockSalesData, mockActiveUsersData, mockProjects, mockActivities } from "@/lib/mockData";
+import { mockSalesData, mockActiveUsersData, mockProjects, mockActivities, mockClients, mockTasks, mockTransactions } from "@/lib/mockData";
 import { formatCurrency, timeAgo } from "@/lib/utils";
+
+// --- Dynamic KPI calculations ---
+const activeClients = mockClients.filter((c) => c.status === "نشط").length;
+const incompleteTasks = mockTasks.filter((t) => t.status !== "مكتملة").length;
+const totalIncome = mockTransactions.filter((t) => t.type === "دخل").reduce((s, t) => s + t.amount, 0);
+const totalExpense = mockTransactions.filter((t) => t.type === "مصروف").reduce((s, t) => s + t.amount, 0);
+const netProfit = totalIncome - totalExpense;
+const completedTasks = mockTasks.filter((t) => t.status === "مكتملة").length;
+const completedPct = Math.round((completedTasks / mockTasks.length) * 100);
 
 const kpiCards = [
   {
-    label: "الموظفون النشطون",
-    value: "156",
+    label: "عدد العملاء المشتركين",
+    value: activeClients.toString(),
     change: 5.3,
     subtitle: "من الشهر الماضي",
     icon: Users,
@@ -27,7 +35,7 @@ const kpiCards = [
   },
   {
     label: "المهام المكتملة",
-    value: "89%",
+    value: `${completedPct}%`,
     change: 8.7,
     subtitle: "من الشهر الماضي",
     icon: CheckCircle2,
@@ -36,26 +44,29 @@ const kpiCards = [
     iconColor: "text-emerald-400",
   },
   {
-    label: "إيرادات هذا الشهر",
-    value: "2.45M",
-    change: 18.2,
-    subtitle: "من الشهر الماضي",
-    icon: TrendingUp,
+    label: "المهام غير المكتملة",
+    value: incompleteTasks.toString(),
+    change: -3.1,
+    subtitle: "مهمة متبقية",
+    icon: XCircle,
     gradient: "from-[#f59e0b] to-[#d97706]",
     iconBg: "bg-amber-500/20",
     iconColor: "text-amber-400",
+    negative: true,
   },
   {
-    label: "إجمالي العملاء",
-    value: "1,248",
+    label: "إجمالي الأرباح",
+    value: netProfit >= 1_000_000
+      ? `${(netProfit / 1_000_000).toFixed(2)}M`
+      : `${formatCurrency(netProfit)}`,
     change: 12.5,
-    subtitle: "من الشهر الماضي",
-    icon: UserCheck,
+    subtitle: "SAR صافي الربح",
+    icon: DollarSign,
     gradient: "from-[#22d3ee] to-[#1e6fd9]",
     iconBg: "bg-cyan-500/20",
     iconColor: "text-cyan-400",
   },
-];
+] as const;
 
 const statusColors: Record<string, string> = {
   "قيد_التنفيذ": "status-pending",
@@ -93,24 +104,26 @@ export default function DashboardPage() {
       <div className="space-y-6">
         {/* KPI Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {kpiCards.map((card, i) => (
-            <div key={i} className="glass-card glass-card-hover p-5 relative overflow-hidden">
-              <div className="flex items-start justify-between mb-3">
-                <div className={`p-2 rounded-xl ${card.iconBg}`}>
-                  <card.icon size={20} className={card.iconColor} />
+          {kpiCards.map((card, i) => {
+            const isNeg = "negative" in card && card.negative;
+            return (
+              <div key={i} className="glass-card glass-card-hover p-5 relative overflow-hidden">
+                <div className="flex items-start justify-between mb-3">
+                  <div className={`p-2 rounded-xl ${card.iconBg}`}>
+                    <card.icon size={20} className={card.iconColor} />
+                  </div>
+                  <div className={`flex items-center gap-1 text-xs font-medium ${isNeg ? "text-amber-400" : "text-emerald-400"}`}>
+                    <ArrowUpRight size={13} />
+                    <span>{isNeg ? card.change : `+${card.change}`}%</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 text-xs font-medium text-emerald-400">
-                  <ArrowUpRight size={13} />
-                  <span>+{card.change}%</span>
-                </div>
+                <div className="text-2xl font-heading font-bold text-white mb-1">{card.value}</div>
+                <div className="text-sm text-[#8ba3c7] mb-1">{card.label}</div>
+                <div className="text-xs text-[#6b87ab]">{card.subtitle}</div>
+                <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r ${card.gradient}`} />
               </div>
-              <div className="text-2xl font-heading font-bold text-white mb-1">{card.value}</div>
-              <div className="text-sm text-[#8ba3c7] mb-1">{card.label}</div>
-              <div className="text-xs text-[#6b87ab]">{card.subtitle}</div>
-              {/* bottom gradient line */}
-              <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r ${card.gradient}`} />
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Welcome + Satisfaction + Referrals */}

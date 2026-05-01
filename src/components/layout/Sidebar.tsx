@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, CheckSquare, UserCircle,
   DollarSign, Map, Bot, BarChart3, Settings, LogOut,
-  ChevronLeft
+  ChevronLeft, Network
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ const navItems = [
   { href: "/clients", label: "العملاء (CRM)", icon: UserCircle },
   { href: "/finance", label: "المالية", icon: DollarSign },
   { href: "/strategy", label: "الاستراتيجية", icon: Map },
+  { href: "/org", label: "الهيكل الإداري", icon: Network },
   { href: "/ai", label: "المساعد الذكي", icon: Bot },
   { href: "/reports", label: "التقارير", icon: BarChart3 },
   { href: "/settings", label: "الإعدادات", icon: Settings },
