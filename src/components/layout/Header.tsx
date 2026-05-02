@@ -6,8 +6,10 @@ import {
   Search, Bell, Mail, Plus, Settings,
   Users, CheckSquare, DollarSign, UserCircle,
   Clock, AlertTriangle, UserCheck, ChevronLeft, Menu,
+  LogOut, User, Building2, ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePermissions, ROLE_LABELS } from "@/contexts/PermissionsContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useNotifications } from "@/contexts/NotificationsContext";
 import { useMessages } from "@/contexts/MessagesContext";
@@ -68,20 +70,145 @@ const QUICK_CREATE = [
   { label: "موظف جديد",   icon: Users,       href: "/employees", color: "#a855f7" },
 ];
 
+// ─── Profile Dropdown ─────────────────────────────────────────────────────────
+
+interface ProfileDropdownProps {
+  user: { id: string; name: string; email: string; role: string; avatar?: string } | null;
+  userRole: string;
+  managedUsers: { userId: string; department: string; isActive: boolean }[];
+  onLogout: () => void;
+  onNavigate: (href: string) => void;
+  open: boolean;
+  onToggle: () => void;
+}
+
+function ProfileDropdown({ user, userRole, managedUsers, onLogout, onNavigate, open, onToggle }: ProfileDropdownProps) {
+  if (!user) return null;
+
+  const currentMU = managedUsers.find((u) => u.userId === user.id);
+  const department = currentMU?.department || "—";
+  const isActive   = currentMU?.isActive ?? true;
+  const initials   = user.name?.slice(0, 2) ?? "م";
+  const roleLabel  = ROLE_LABELS[userRole as keyof typeof ROLE_LABELS] ?? userRole.replace(/_/g, " ");
+
+  return (
+    <div className="relative">
+      <button
+        onClick={onToggle}
+        className={cn(
+          "flex items-center gap-2 px-2 py-1.5 rounded-xl transition-all",
+          open ? "bg-[#1a3356]" : "hover:bg-[#1a3356]/50"
+        )}
+        title="الملف الشخصي"
+      >
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+          style={{ background: "linear-gradient(135deg,#ff7a3d,#ff5722)" }}
+        >
+          {initials}
+        </div>
+        <div className="hidden sm:block text-right leading-none">
+          <div className="text-xs font-medium text-white">{user.name}</div>
+          <div className="text-[10px] text-[#8ba3c7] mt-0.5">{roleLabel}</div>
+        </div>
+        <ChevronLeft size={12} className={cn("text-[#8ba3c7] hidden sm:block transition-transform", open && "rotate-90")} />
+      </button>
+
+      {open && (
+        <div
+          className="absolute left-0 top-full mt-2 w-72 rounded-2xl border border-[#1e3a5f] shadow-2xl z-50 overflow-hidden"
+          style={{ background: "rgba(10,22,40,0.98)", backdropFilter: "blur(20px)" }}
+        >
+          {/* User card */}
+          <div className="p-4 border-b border-[#1e3a5f]">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold text-white flex-shrink-0"
+                style={{ background: "linear-gradient(135deg,#ff7a3d,#ff5722)" }}
+              >
+                {initials}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-white font-semibold text-sm truncate">{user.name}</div>
+                <div className="text-[#8ba3c7] text-xs truncate mt-0.5">{user.email}</div>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium",
+                      isActive
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : "bg-red-500/15 text-red-400"
+                    )}
+                  >
+                    <span className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-emerald-400" : "bg-red-400")} />
+                    {isActive ? "نشط" : "غير نشط"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Info rows */}
+          <div className="px-4 py-3 space-y-2 border-b border-[#1e3a5f]">
+            <div className="flex items-center gap-3 text-xs">
+              <ShieldCheck size={14} className="text-[#22d3ee] flex-shrink-0" />
+              <span className="text-[#8ba3c7]">الدور:</span>
+              <span className="text-white font-medium mr-auto">{roleLabel}</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <Building2 size={14} className="text-[#22d3ee] flex-shrink-0" />
+              <span className="text-[#8ba3c7]">القسم:</span>
+              <span className="text-white font-medium mr-auto">{department}</span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="p-2">
+            <button
+              onClick={() => { onNavigate("/employees"); onToggle(); }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#8ba3c7] hover:text-white hover:bg-[#1a3356]/60 transition-all text-right"
+            >
+              <User size={15} className="text-[#22d3ee] flex-shrink-0" />
+              الملف الشخصي
+            </button>
+            <button
+              onClick={() => { onNavigate("/settings"); onToggle(); }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-[#8ba3c7] hover:text-white hover:bg-[#1a3356]/60 transition-all text-right"
+            >
+              <Settings size={15} className="text-[#22d3ee] flex-shrink-0" />
+              إعدادات الحساب
+            </button>
+            <div className="my-1 border-t border-[#1e3a5f]" />
+            <button
+              onClick={() => { onLogout(); onToggle(); }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all text-right"
+            >
+              <LogOut size={15} className="flex-shrink-0" />
+              تسجيل الخروج
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Header ───────────────────────────────────────────────────────────────────
 
 export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { userRole, managedUsers } = usePermissions();
   const toast = useToast();
   const { notifications, unread: unreadNotif, markRead, markAllRead } = useNotifications();
   const { messages, unread: unreadMsg, markRead: markMsgRead, markAllRead: markAllMsgRead } = useMessages();
 
   // dropdown open state
-  const [openNotif,  setOpenNotif]  = useState(false);
-  const [openMsg,    setOpenMsg]    = useState(false);
-  const [openNew,    setOpenNew]    = useState(false);
-  const [openSearch, setOpenSearch] = useState(false);
+  const [openNotif,   setOpenNotif]   = useState(false);
+  const [openMsg,     setOpenMsg]     = useState(false);
+  const [openNew,     setOpenNew]     = useState(false);
+  const [openSearch,  setOpenSearch]  = useState(false);
+  const [openProfile, setOpenProfile] = useState(false);
 
   // search
   const [query,   setQuery]   = useState("");
@@ -103,6 +230,7 @@ export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: ()
         setOpenMsg(false);
         setOpenNew(false);
         setOpenSearch(false);
+        setOpenProfile(false);
       }
     }
     document.addEventListener("mousedown", handle);
@@ -320,15 +448,19 @@ export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: ()
           <Settings size={18} />
         </button>
 
-        {/* Avatar / logout */}
-        <button
-          onClick={handleLogout}
-          title="تسجيل الخروج"
-          className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white transition-opacity hover:opacity-80"
-          style={{ background: "linear-gradient(135deg,#ff7a3d,#ff5722)" }}
-        >
-          {user?.avatar ?? user?.name?.slice(0, 2) ?? "م"}
-        </button>
+        {/* Profile dropdown */}
+        <ProfileDropdown
+          user={user}
+          userRole={userRole}
+          managedUsers={managedUsers}
+          onLogout={handleLogout}
+          onNavigate={goTo}
+          open={openProfile}
+          onToggle={() => {
+            setOpenProfile(!openProfile);
+            setOpenNotif(false); setOpenMsg(false); setOpenNew(false);
+          }}
+        />
       </div>
     </header>
   );

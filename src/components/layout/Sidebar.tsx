@@ -62,7 +62,10 @@ export default function Sidebar({
     setTimeout(() => logout(), 600);
   };
 
-  const visibleItems = NAV_ITEMS.filter((item) => hasPermission(item.permission));
+  // super_admin always sees every section — no permission check needed
+  const visibleItems = userRole === "super_admin"
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((item) => hasPermission(item.permission));
 
   const sidebarContent = (
     <aside

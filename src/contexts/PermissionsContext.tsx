@@ -186,14 +186,29 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     }).catch(console.error);
   }, [user?.id]);
 
-  const currentRecord = managedUsers.find(
-    (u) => u.userId === user?.id || u.email === user?.email
-  );
-  const userRole: UserRole =
-    currentRecord?.role ?? mapAuthRoleToUserRole(user?.role ?? "");
+  // ── userRole: single authoritative source is user.role from AuthContext
+  //    (which reads directly from profiles table by auth user id).
+  //    managedUsers is used only for the admin panel — never to determine
+  //    the current user's own role, to avoid async race conditions.
+  const userRole: UserRole = mapAuthRoleToUserRole(user?.role ?? "");
+
+  // Debug: always log to console so we can verify the flow
+  useEffect(() => {
+    if (!user) return;
+    console.group("[Blumark24 Auth Debug]");
+    console.log("auth email :", user.email);
+    console.log("auth id    :", user.id);
+    console.log("raw role   :", user.role);
+    console.log("mapped role:", userRole);
+    console.log("isSuperAdmin:", userRole === "super_admin");
+    console.groupEnd();
+  }, [user, userRole]);
 
   const hasPermission = useCallback(
-    (perm: Permission) => (rolePermissions[userRole] ?? []).includes(perm),
+    (perm: Permission) => {
+      if (userRole === "super_admin") return true;
+      return (rolePermissions[userRole] ?? []).includes(perm);
+    },
     [userRole, rolePermissions]
   );
 
