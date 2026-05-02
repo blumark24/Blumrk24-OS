@@ -1,28 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import {
-  mockClients,
-  mockTasks,
-  mockTransactions,
-  mockEmployees,
-  mockProjects,
-  mockActivities,
-} from "@/lib/mockData";
+import { supabase } from "@/lib/supabase";
 import {
   getBoardMembers,
   insertBoardMember,
   updateBoardMember,
   deleteBoardMember,
-  DEFAULT_BOARD,
 } from "@/lib/db";
 import type { Client, Task, Transaction, Employee, Project, Activity } from "@/types";
 import type { BoardMember } from "@/lib/db";
 
 // ─── camelCase ↔ snake_case mappers ──────────────────────────────────────────
 
-// Client
 function clientFromDB(row: Record<string, unknown>): Client {
   return {
     id:                 row.id              as string,
@@ -52,7 +42,6 @@ function clientToDB(item: Omit<Client, "id" | "createdAt">): Record<string, unkn
     account_manager_id:   item.accountManagerId,
     account_manager_name: item.accountManagerName,
     notes:                item.notes,
-    created_at:           new Date().toISOString(),
   };
 }
 
@@ -71,7 +60,6 @@ function clientUpdateToDB(changes: Partial<Client>): Record<string, unknown> {
   return map;
 }
 
-// Task
 function taskFromDB(row: Record<string, unknown>): Task {
   return {
     id:              row.id             as string,
@@ -103,7 +91,6 @@ function taskToDB(item: Omit<Task, "id" | "createdAt">): Record<string, unknown>
     client_name:     item.clientName,
     due_date:        item.dueDate,
     tags:            item.tags,
-    created_at:      new Date().toISOString(),
   };
 }
 
@@ -123,7 +110,6 @@ function taskUpdateToDB(changes: Partial<Task>): Record<string, unknown> {
   return map;
 }
 
-// Employee
 function employeeFromDB(row: Record<string, unknown>): Employee {
   return {
     id:             row.id              as string,
@@ -176,7 +162,6 @@ function employeeUpdateToDB(changes: Partial<Employee>): Record<string, unknown>
   return map;
 }
 
-// Project
 function projectFromDB(row: Record<string, unknown>): Project {
   return {
     id:                  row.id                   as string,
@@ -190,7 +175,6 @@ function projectFromDB(row: Record<string, unknown>): Project {
   };
 }
 
-// Activity
 function activityFromDB(row: Record<string, unknown>): Activity {
   return {
     id:          row.id          as string,
@@ -204,16 +188,15 @@ function activityFromDB(row: Record<string, unknown>): Activity {
 // ─── Generic async hook ───────────────────────────────────────────────────────
 
 function useAsyncData<T>(fetcher: () => Promise<T>, fallback: T) {
-  const [data, setData]     = useState<T>(fallback);
+  const [data, setData]       = useState<T>(fallback);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetcher();
-      setData(result);
+      setData(await fetcher());
     } catch (err) {
       setError(err instanceof Error ? err.message : "حدث خطأ في تحميل البيانات");
       setData(fallback);
@@ -230,10 +213,6 @@ function useAsyncData<T>(fetcher: () => Promise<T>, fallback: T) {
 // ─── Clients ──────────────────────────────────────────────────────────────────
 
 async function fetchClients(): Promise<Client[]> {
-  if (!isSupabaseConfigured) {
-    await new Promise((r) => setTimeout(r, 300));
-    return mockClients;
-  }
   const { data, error } = await supabase
     .from("clients")
     .select("*")
@@ -243,11 +222,10 @@ async function fetchClients(): Promise<Client[]> {
 }
 
 export function useClients() {
-  const result = useAsyncData<Client[]>(fetchClients, isSupabaseConfigured ? [] : mockClients);
+  const result = useAsyncData<Client[]>(fetchClients, []);
   const { setData, refetch } = result;
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     const ch = supabase
       .channel("clients-rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "clients" }, () => refetch())
@@ -256,34 +234,22 @@ export function useClients() {
   }, [refetch]);
 
   const insert = useCallback(async (item: Omit<Client, "id" | "createdAt">) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => [{ id: String(Date.now()), createdAt: new Date().toISOString(), ...item }, ...prev]);
-      return;
-    }
     const { error } = await supabase.from("clients").insert([clientToDB(item)]);
     if (error) throw new Error(error.message);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   const update = useCallback(async (id: string, changes: Partial<Client>) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => prev.map((c) => c.id === id ? { ...c, ...changes } : c));
-      return;
-    }
     const { error } = await supabase.from("clients").update(clientUpdateToDB(changes)).eq("id", id);
     if (error) throw new Error(error.message);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   const remove = useCallback(async (id: string) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => prev.filter((c) => c.id !== id));
-      return;
-    }
     const { error } = await supabase.from("clients").delete().eq("id", id);
     if (error) throw new Error(error.message);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   return { ...result, insert, update, remove };
 }
@@ -291,10 +257,6 @@ export function useClients() {
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 async function fetchTasks(): Promise<Task[]> {
-  if (!isSupabaseConfigured) {
-    await new Promise((r) => setTimeout(r, 300));
-    return mockTasks;
-  }
   const { data, error } = await supabase
     .from("tasks")
     .select("*")
@@ -304,11 +266,10 @@ async function fetchTasks(): Promise<Task[]> {
 }
 
 export function useTasks() {
-  const result = useAsyncData<Task[]>(fetchTasks, isSupabaseConfigured ? [] : mockTasks);
-  const { setData, refetch } = result;
+  const result = useAsyncData<Task[]>(fetchTasks, []);
+  const { refetch } = result;
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     const ch = supabase
       .channel("tasks-rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => refetch())
@@ -317,34 +278,22 @@ export function useTasks() {
   }, [refetch]);
 
   const insert = useCallback(async (item: Omit<Task, "id" | "createdAt">) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => [{ id: String(Date.now()), createdAt: new Date().toISOString(), ...item }, ...prev]);
-      return;
-    }
     const { error } = await supabase.from("tasks").insert([taskToDB(item)]);
     if (error) throw new Error(error.message);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   const update = useCallback(async (id: string, changes: Partial<Task>) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => prev.map((t) => t.id === id ? { ...t, ...changes } : t));
-      return;
-    }
     const { error } = await supabase.from("tasks").update(taskUpdateToDB(changes)).eq("id", id);
     if (error) throw new Error(error.message);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   const remove = useCallback(async (id: string) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => prev.filter((t) => t.id !== id));
-      return;
-    }
     const { error } = await supabase.from("tasks").delete().eq("id", id);
     if (error) throw new Error(error.message);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   return { ...result, insert, update, remove };
 }
@@ -352,25 +301,19 @@ export function useTasks() {
 // ─── Transactions ─────────────────────────────────────────────────────────────
 
 async function fetchTransactions(): Promise<Transaction[]> {
-  if (!isSupabaseConfigured) {
-    await new Promise((r) => setTimeout(r, 300));
-    return mockTransactions;
-  }
   const { data, error } = await supabase
     .from("transactions")
     .select("*")
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  // Transaction columns all match camelCase already (type, amount, description, category, date, funds)
   return (data ?? []) as Transaction[];
 }
 
 export function useTransactions() {
-  const result = useAsyncData<Transaction[]>(fetchTransactions, isSupabaseConfigured ? [] : mockTransactions);
-  const { setData, refetch } = result;
+  const result = useAsyncData<Transaction[]>(fetchTransactions, []);
+  const { refetch } = result;
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     const ch = supabase
       .channel("transactions-rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => refetch())
@@ -379,14 +322,10 @@ export function useTransactions() {
   }, [refetch]);
 
   const insert = useCallback(async (item: Omit<Transaction, "id">) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => [{ id: String(Date.now()), ...item }, ...prev]);
-      return;
-    }
     const { error } = await supabase.from("transactions").insert([item]);
     if (error) throw new Error(error.message);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   return { ...result, insert };
 }
@@ -394,10 +333,6 @@ export function useTransactions() {
 // ─── Employees ────────────────────────────────────────────────────────────────
 
 async function fetchEmployees(): Promise<Employee[]> {
-  if (!isSupabaseConfigured) {
-    await new Promise((r) => setTimeout(r, 300));
-    return mockEmployees;
-  }
   const { data, error } = await supabase
     .from("employees")
     .select("*")
@@ -407,11 +342,10 @@ async function fetchEmployees(): Promise<Employee[]> {
 }
 
 export function useEmployees() {
-  const result = useAsyncData<Employee[]>(fetchEmployees, isSupabaseConfigured ? [] : mockEmployees);
-  const { setData, refetch } = result;
+  const result = useAsyncData<Employee[]>(fetchEmployees, []);
+  const { refetch } = result;
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     const ch = supabase
       .channel("employees-rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "employees" }, () => refetch())
@@ -420,34 +354,22 @@ export function useEmployees() {
   }, [refetch]);
 
   const insert = useCallback(async (item: Omit<Employee, "id">) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => [{ id: String(Date.now()), ...item }, ...prev]);
-      return;
-    }
     const { error } = await supabase.from("employees").insert([employeeToDB(item)]);
     if (error) throw new Error(error.message);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   const update = useCallback(async (id: string, changes: Partial<Employee>) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => prev.map((e) => e.id === id ? { ...e, ...changes } : e));
-      return;
-    }
     const { error } = await supabase.from("employees").update(employeeUpdateToDB(changes)).eq("id", id);
     if (error) throw new Error(error.message);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   const remove = useCallback(async (id: string) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => prev.filter((e) => e.id !== id));
-      return;
-    }
     const { error } = await supabase.from("employees").delete().eq("id", id);
     if (error) throw new Error(error.message);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   return { ...result, insert, update, remove };
 }
@@ -455,10 +377,6 @@ export function useEmployees() {
 // ─── Projects ─────────────────────────────────────────────────────────────────
 
 async function fetchProjects(): Promise<Project[]> {
-  if (!isSupabaseConfigured) {
-    await new Promise((r) => setTimeout(r, 300));
-    return mockProjects;
-  }
   const { data, error } = await supabase
     .from("projects")
     .select("*")
@@ -468,16 +386,12 @@ async function fetchProjects(): Promise<Project[]> {
 }
 
 export function useProjects() {
-  return useAsyncData(fetchProjects, isSupabaseConfigured ? [] : mockProjects);
+  return useAsyncData<Project[]>(fetchProjects, []);
 }
 
 // ─── Activities ───────────────────────────────────────────────────────────────
 
 async function fetchActivities(): Promise<Activity[]> {
-  if (!isSupabaseConfigured) {
-    await new Promise((r) => setTimeout(r, 300));
-    return mockActivities;
-  }
   const { data, error } = await supabase
     .from("activities")
     .select("*")
@@ -488,17 +402,16 @@ async function fetchActivities(): Promise<Activity[]> {
 }
 
 export function useActivities() {
-  return useAsyncData(fetchActivities, isSupabaseConfigured ? [] : mockActivities);
+  return useAsyncData<Activity[]>(fetchActivities, []);
 }
 
 // ─── Board Members ────────────────────────────────────────────────────────────
 
 export function useBoardMembers() {
-  const result = useAsyncData<BoardMember[]>(getBoardMembers, DEFAULT_BOARD);
-  const { setData, refetch } = result;
+  const result = useAsyncData<BoardMember[]>(getBoardMembers, []);
+  const { refetch } = result;
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     const ch = supabase
       .channel("board-members-rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "board_members" }, () => refetch())
@@ -507,38 +420,25 @@ export function useBoardMembers() {
   }, [refetch]);
 
   const insert = useCallback(async (item: Omit<BoardMember, "id">) => {
-    if (!isSupabaseConfigured) {
-      const newItem: BoardMember = { id: String(Date.now()), ...item };
-      setData((prev) => [...prev, newItem]);
-      return newItem;
-    }
     const newMember = await insertBoardMember(item);
     await refetch();
     return newMember;
-  }, [setData, refetch]);
+  }, [refetch]);
 
   const update = useCallback(async (id: string, changes: Partial<Omit<BoardMember, "id">>) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => prev.map((m) => m.id === id ? { ...m, ...changes } : m));
-      return;
-    }
     await updateBoardMember(id, changes);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   const remove = useCallback(async (id: string) => {
-    if (!isSupabaseConfigured) {
-      setData((prev) => prev.filter((m) => m.id !== id));
-      return;
-    }
     await deleteBoardMember(id);
     await refetch();
-  }, [setData, refetch]);
+  }, [refetch]);
 
   return { ...result, insert, update, remove };
 }
 
-// ─── Dashboard KPI aggregation ────────────────────────────────────────────────
+// ─── Dashboard KPI ────────────────────────────────────────────────────────────
 
 export interface DashboardKPI {
   activeClients: number;
@@ -548,9 +448,9 @@ export interface DashboardKPI {
 }
 
 export function useDashboardKPI() {
-  const [kpi, setKpi]     = useState<DashboardKPI>({ activeClients: 0, completedTasksPct: 0, incompleteTasks: 0, netProfit: 0 });
+  const [kpi, setKpi]         = useState<DashboardKPI>({ activeClients: 0, completedTasksPct: 0, incompleteTasks: 0, netProfit: 0 });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
 
   const compute = useCallback(async () => {
     try {
@@ -560,12 +460,12 @@ export function useDashboardKPI() {
         fetchTransactions(),
       ]);
 
-      const activeClients      = clients.filter((c) => c.status === "نشط").length;
-      const completed          = tasks.filter((t) => t.status === "مكتملة").length;
-      const completedTasksPct  = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
-      const incompleteTasks    = tasks.filter((t) => t.status !== "مكتملة").length;
-      const totalIncome        = transactions.filter((t) => t.type === "دخل").reduce((s, t) => s + t.amount, 0);
-      const totalExpense       = transactions.filter((t) => t.type === "مصروف").reduce((s, t) => s + t.amount, 0);
+      const activeClients     = clients.filter((c) => c.status === "نشط").length;
+      const completed         = tasks.filter((t) => t.status === "مكتملة").length;
+      const completedTasksPct = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
+      const incompleteTasks   = tasks.filter((t) => t.status !== "مكتملة").length;
+      const totalIncome       = transactions.filter((t) => t.type === "دخل").reduce((s, t) => s + t.amount, 0);
+      const totalExpense      = transactions.filter((t) => t.type === "مصروف").reduce((s, t) => s + t.amount, 0);
 
       setKpi({ activeClients, completedTasksPct, incompleteTasks, netProfit: totalIncome - totalExpense });
     } catch (err) {
@@ -578,7 +478,6 @@ export function useDashboardKPI() {
   useEffect(() => { compute(); }, [compute]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     const ch = supabase
       .channel("kpi-rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "clients" },      () => compute())

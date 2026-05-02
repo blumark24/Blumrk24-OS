@@ -8,12 +8,12 @@ import {
   useCallback,
   ReactNode,
 } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import {
   getNotifications,
   markNotificationReadInDB,
   markAllNotificationsReadInDB,
-  FALLBACK_NOTIFICATIONS,
+  type DBNotification,
 } from "@/lib/db";
 import { useAuth } from "./AuthContext";
 
@@ -41,7 +41,7 @@ const NotifContext = createContext<NotifContextValue>({
   markAllRead: () => {},
 });
 
-function mapDBToApp(n: typeof FALLBACK_NOTIFICATIONS[0]): AppNotification {
+function mapDBToApp(n: DBNotification): AppNotification {
   return {
     id:    n.id,
     type:  n.type,
@@ -58,17 +58,17 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const load = useCallback(async () => {
-    const raw = await getNotifications(user?.id);
-    setNotifications(raw.map(mapDBToApp));
+    try {
+      const raw = await getNotifications(user?.id);
+      setNotifications(raw.map(mapDBToApp));
+    } catch {
+      // silently keep empty on error
+    }
   }, [user?.id]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  // Realtime subscription
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     const channel = supabase
       .channel("notifications-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () => load())

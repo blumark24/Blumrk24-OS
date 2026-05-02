@@ -9,7 +9,7 @@ import {
   ReactNode,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { getUserProfile } from "@/lib/db";
 
 export interface AuthUser {
@@ -45,6 +45,17 @@ function setSessionCookie(value: string) {
   }
 }
 
+async function buildUser(id: string, email: string): Promise<AuthUser> {
+  const profile = await getUserProfile(id);
+  return {
+    id,
+    email,
+    name:   profile?.name   ?? email,
+    role:   profile?.role   ?? "employee",
+    avatar: profile?.avatar,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router   = useRouter();
   const pathname = usePathname();
@@ -53,37 +64,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setLoading(false);
-      return;
-    }
-
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        const profile = await getUserProfile(session.user.id);
-        setUser({
-          id:     session.user.id,
-          email:  session.user.email ?? "",
-          name:   profile?.name  ?? session.user.email ?? "",
-          role:   profile?.role  ?? "employee",
-          avatar: profile?.avatar,
-        });
+        const u = await buildUser(session.user.id, session.user.email ?? "");
+        setUser(u);
         setSessionCookie("1");
       }
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         if (session?.user) {
-          const profile = await getUserProfile(session.user.id);
-          setUser({
-            id:     session.user.id,
-            email:  session.user.email ?? "",
-            name:   profile?.name  ?? session.user.email ?? "",
-            role:   profile?.role  ?? "employee",
-            avatar: profile?.avatar,
-          });
+          const u = await buildUser(session.user.id, session.user.email ?? "");
+          setUser(u);
           setSessionCookie("1");
         } else {
           setUser(null);
@@ -108,19 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
-      if (!isSupabaseConfigured) {
-        return {
-          ok: false,
-          error: "لم يتم تهيئة Supabase. يرجى إضافة NEXT_PUBLIC_SUPABASE_URL و NEXT_PUBLIC_SUPABASE_ANON_KEY في متغيرات البيئة.",
-        };
-      }
-
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         return { ok: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
       }
-
-      // onAuthStateChange handles user state update + session cookie
       router.replace("/");
       return { ok: true };
     },
@@ -128,9 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
-    }
+    await supabase.auth.signOut();
     setUser(null);
     setSessionCookie("");
     router.replace("/auth");
