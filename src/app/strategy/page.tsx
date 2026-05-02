@@ -1,10 +1,79 @@
 "use client";
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { mockStrategyPhases } from "@/lib/mockData";
 import { Map, CheckCircle2, Clock, Target, Lightbulb, TrendingUp } from "lucide-react";
+import type { StrategyPhase } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+
+// Blumark24 strategic roadmap — company planning data
+const STRATEGY_PHASES: StrategyPhase[] = [
+  {
+    id: 1,
+    title: "المرحلة الأولى: الانطلاق",
+    description: "10 عملاء وتطوير المشروع الأساسي",
+    progress: 100,
+    budget: 50000,
+    startDate: "2023-01-01",
+    endDate: "2023-06-30",
+    targetClients: 10,
+    currentClients: 10,
+    goals: ["بناء فريق العمل الأساسي", "اكتساب أول 10 عملاء", "تطوير النظام الأساسي", "إنشاء هوية العلامة التجارية"],
+    status: "مكتملة",
+  },
+  {
+    id: 2,
+    title: "المرحلة الثانية: النمو",
+    description: "25 عميل + توظيف + تطوير النظام",
+    progress: 72,
+    budget: 150000,
+    startDate: "2023-07-01",
+    endDate: "2024-06-30",
+    targetClients: 25,
+    currentClients: 18,
+    goals: ["الوصول لـ25 عميل", "توظيف 5 موظفين جدد", "تطوير نظام Blumark24 OS", "تطوير خدمات الذكاء الاصطناعي"],
+    status: "جارية",
+  },
+  {
+    id: 3,
+    title: "المرحلة الثالثة: التوسع",
+    description: "مكتب مكة + المطاعم والمقاهي والبقالات",
+    progress: 20,
+    budget: 300000,
+    startDate: "2024-07-01",
+    endDate: "2025-03-31",
+    targetClients: 60,
+    currentClients: 12,
+    goals: ["افتتاح مكتب في مكة", "استهداف قطاع المطاعم والمقاهي", "تطوير حلول للبقالات", "شراكات استراتيجية"],
+    status: "قادمة",
+  },
+  {
+    id: 4,
+    title: "المرحلة الرابعة: التميز",
+    description: "تنفيذ البراند والتجهيزات الاحترافية",
+    progress: 0,
+    budget: 500000,
+    startDate: "2025-04-01",
+    endDate: "2025-12-31",
+    targetClients: 120,
+    currentClients: 0,
+    goals: ["إطلاق تجهيزات احترافية", "تطوير منصة SaaS", "برنامج الشراكة مع الشركاء", "الاعتراف الوطني بالعلامة"],
+    status: "قادمة",
+  },
+  {
+    id: 5,
+    title: "المرحلة الخامسة: الريادة",
+    description: "B2G + منصة فرص + المنافسات الحكومية",
+    progress: 0,
+    budget: 1000000,
+    startDate: "2026-01-01",
+    endDate: "2026-12-31",
+    targetClients: 250,
+    currentClients: 0,
+    goals: ["الدخول في العقود الحكومية (B2G)", "إطلاق منصة الفرص الرقمية", "المشاركة في المنافسات الحكومية", "الانتشار الوطني الكامل"],
+    status: "قادمة",
+  },
+];
 
 const STATUS_CONFIG = {
   "مكتملة": { class: "status-completed", color: "#10b981", icon: CheckCircle2 },
@@ -21,7 +90,7 @@ const AI_RECOMMENDATIONS = [
 
 export default function StrategyPage() {
   const overallProgress = Math.round(
-    mockStrategyPhases.reduce((s, p) => s + p.progress, 0) / mockStrategyPhases.length
+    STRATEGY_PHASES.reduce((s, p) => s + p.progress, 0) / STRATEGY_PHASES.length
   );
 
   return (
@@ -70,7 +139,7 @@ export default function StrategyPage() {
           <div className="absolute right-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-[#22d3ee] via-[#1e6fd9] to-[#1e3a5f]" />
 
           <div className="space-y-6">
-            {mockStrategyPhases.map((phase, i) => {
+            {STRATEGY_PHASES.map((phase, i) => {
               const statusConf = STATUS_CONFIG[phase.status];
               const Icon = statusConf.icon;
               return (
@@ -129,7 +198,7 @@ export default function StrategyPage() {
                       </div>
                       <div>
                         <div className="text-xs text-[#8ba3c7] mb-1">المرحلة</div>
-                        <div className="text-white font-bold text-sm">{i + 1} / {mockStrategyPhases.length}</div>
+                        <div className="text-white font-bold text-sm">{i + 1} / {STRATEGY_PHASES.length}</div>
                       </div>
                     </div>
 
