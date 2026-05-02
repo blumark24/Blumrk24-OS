@@ -85,12 +85,17 @@ export interface DBNotification {
 }
 
 export async function getNotifications(userId?: string): Promise<DBNotification[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("notifications")
     .select("*")
-    .or(`user_id.eq.${userId ?? "null"},user_id.is.null`)
     .order("created_at", { ascending: false })
     .limit(20);
+  if (userId) {
+    query = query.or(`user_id.eq.${userId},user_id.is.null`);
+  } else {
+    query = query.is("user_id", null);
+  }
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as DBNotification[];
 }
@@ -144,4 +149,32 @@ export async function updateProfileRole(userId: string, role: string): Promise<v
 export async function toggleProfileStatus(userId: string, isActive: boolean): Promise<void> {
   const { error } = await supabase.from("profiles").update({ is_active: isActive }).eq("id", userId);
   if (error) throw new Error(error.message);
+}
+
+// ─── Activity Log ───────────────────────────────────────────────────────────────
+
+export async function logActivity(
+  type: "employee" | "task" | "client" | "finance" | "project",
+  description: string,
+  icon?: string,
+): Promise<void> {
+  await supabase.from("activities").insert([{ type, description, icon }]);
+}
+
+// ─── Notifications ──────────────────────────────────────────────────────────────
+
+export async function createNotification(
+  type: "task_due" | "task_late" | "client_followup" | "invoice_due",
+  title: string,
+  body: string,
+  href: string,
+  userId?: string,
+): Promise<void> {
+  await supabase.from("notifications").insert([{
+    type,
+    title,
+    body,
+    href,
+    user_id: userId ?? null,
+  }]);
 }

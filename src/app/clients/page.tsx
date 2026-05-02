@@ -6,6 +6,7 @@ import { CITIES, formatCurrency } from "@/lib/utils";
 import { UserCircle, Plus, Search, Phone, MapPin, Package, Edit2, Trash2, X } from "lucide-react";
 import type { ClientStatus, PackageType } from "@/types";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { useAuth } from "@/contexts/AuthContext";
 import AccessDenied from "@/components/ui/AccessDenied";
 import { useClients } from "@/hooks/useData";
 import { useToast } from "@/contexts/ToastContext";
@@ -29,6 +30,7 @@ const STATUSES: ClientStatus[] = ["محتمل", "متعاقد", "نشط", "مت�
 function ClientsContent() {
   const { data: clients, loading, insert, update, remove } = useClients();
   const { userRole } = usePermissions();
+  const { user } = useAuth();
   const toast = useToast();
   const isAdmin = userRole === "super_admin";
   const [search, setSearch] = useState("");
@@ -94,7 +96,7 @@ function ClientsContent() {
         await update(editId, payload);
         toast.success("تم تحديث بيانات العميل بنجاح");
       } else {
-        await insert({ ...payload, accountManagerId: "1" });
+        await insert({ ...payload, accountManagerId: user?.id ?? "" });
         toast.success("تمت إضافة العميل بنجاح");
       }
       setShowModal(false);
