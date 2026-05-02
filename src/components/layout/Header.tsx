@@ -4,14 +4,14 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Bell, Mail, Plus, Settings,
-  Users, CheckSquare, DollarSign, UserCircle, Briefcase,
-  Clock, AlertTriangle, UserCheck, X, ChevronLeft, Menu,
+  Users, CheckSquare, DollarSign, UserCircle,
+  Clock, AlertTriangle, UserCheck, ChevronLeft, Menu,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { useNotifications } from "@/contexts/NotificationsContext";
 import { useMessages } from "@/contexts/MessagesContext";
-import { mockClients, mockTasks, mockEmployees } from "@/lib/mockData";
+import { supabase } from "@/lib/supabase";
 import { timeAgo } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -25,31 +25,26 @@ interface SearchResult {
   icon: React.ElementType;
 }
 
-function buildResults(q: string): SearchResult[] {
+async function searchSupabase(q: string): Promise<SearchResult[]> {
   if (!q.trim()) return [];
-  const lq = q.trim();
+  const lq = `%${q.trim()}%`;
   const out: SearchResult[] = [];
 
-  mockClients
-    .filter((c) => c.name.includes(lq) || c.phone.includes(lq))
-    .slice(0, 3)
-    .forEach((c) =>
-      out.push({ id: `c-${c.id}`, label: c.name, sub: `عميل · ${c.city}`, href: "/clients", icon: UserCircle })
-    );
+  const [clientsRes, tasksRes, employeesRes] = await Promise.all([
+    supabase.from("clients").select("id, name, city").or(`name.ilike.${lq},phone.ilike.${lq}`).limit(3),
+    supabase.from("tasks").select("id, title, assignee_name").ilike("title", lq).limit(3),
+    supabase.from("employees").select("id, name, department").or(`name.ilike.${lq},email.ilike.${lq}`).limit(2),
+  ]);
 
-  mockTasks
-    .filter((t) => t.title.includes(lq))
-    .slice(0, 3)
-    .forEach((t) =>
-      out.push({ id: `t-${t.id}`, label: t.title, sub: `مهمة · ${t.assigneeName}`, href: "/tasks", icon: CheckSquare })
-    );
-
-  mockEmployees
-    .filter((e) => e.name.includes(lq) || e.email.includes(lq))
-    .slice(0, 2)
-    .forEach((e) =>
-      out.push({ id: `e-${e.id}`, label: e.name, sub: `موظف · ${e.department}`, href: "/employees", icon: Users })
-    );
+  for (const c of clientsRes.data ?? []) {
+    out.push({ id: `c-${c.id}`, label: c.name, sub: `عميل · ${c.city}`, href: "/clients", icon: UserCircle });
+  }
+  for (const t of tasksRes.data ?? []) {
+    out.push({ id: `t-${t.id}`, label: t.title, sub: `مهمة · ${t.assignee_name}`, href: "/tasks", icon: CheckSquare });
+  }
+  for (const e of employeesRes.data ?? []) {
+    out.push({ id: `e-${e.id}`, label: e.name, sub: `موظف · ${e.department}`, href: "/employees", icon: Users });
+  }
 
   return out;
 }
@@ -93,7 +88,10 @@ export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: ()
   const [results, setResults] = useState<SearchResult[]>([]);
 
   useEffect(() => {
-    setResults(buildResults(query));
+    const timer = setTimeout(() => {
+      searchSupabase(query).then(setResults).catch(() => setResults([]));
+    }, 250);
+    return () => clearTimeout(timer);
   }, [query]);
 
   // close all on outside click

@@ -10,9 +10,9 @@ import {
   Users, CheckCircle2, ArrowUpRight, XCircle,
   DollarSign, Activity, Clock, UserCheck, Star,
 } from "lucide-react";
-import { mockSalesData, mockActiveUsersData } from "@/lib/mockData";
 import { formatCurrency, timeAgo } from "@/lib/utils";
-import { useDashboardKPI, useProjects, useActivities } from "@/hooks/useData";
+import { useDashboardKPI, useProjects, useActivities, useTransactions, useEmployees } from "@/hooks/useData";
+import { useMemo } from "react";
 import { KPICardSkeleton, ChartSkeleton, CardSkeleton } from "@/components/ui/Skeleton";
 
 // ─── Tooltip ────────────────────────────────────────────────────────────────
@@ -55,10 +55,35 @@ const activityIcons: Record<string, React.ReactNode> = {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
+const ARABIC_MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+
 export default function DashboardPage() {
   const { kpi, loading: kpiLoading }           = useDashboardKPI();
   const { data: projects, loading: projLoad }  = useProjects();
   const { data: activities, loading: actLoad } = useActivities();
+  const { data: transactions }                 = useTransactions();
+  const { data: employees }                    = useEmployees();
+
+  // Compute monthly income from real transactions
+  const salesData = useMemo(() => {
+    const byMonth: Record<number, number> = {};
+    transactions
+      .filter((t) => t.type === "دخل")
+      .forEach((t) => {
+        const m = new Date(t.date).getMonth();
+        if (!isNaN(m)) byMonth[m] = (byMonth[m] ?? 0) + t.amount;
+      });
+    return ARABIC_MONTHS.map((month, i) => ({ month, current: byMonth[i] ?? 0, previous: 0 }));
+  }, [transactions]);
+
+  // Active employees as proxy for active users chart
+  const activeUsersData = useMemo(() => {
+    const depts = Array.from(new Set(employees.map((e) => e.department))).slice(0, 6);
+    return depts.map((dept) => ({
+      date: dept,
+      users: employees.filter((e) => e.department === dept && e.status === "نشط").length,
+    }));
+  }, [employees]);
 
   // KPI card definitions (values come from hook)
   const kpiCards = [
@@ -223,7 +248,7 @@ export default function DashboardPage() {
               <span className="text-xs text-[#8ba3c7] bg-[#1a3356]/50 px-2 py-1 rounded-lg">آخر 12 شهر</span>
             </div>
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={mockSalesData}>
+              <LineChart data={salesData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(30,58,95,0.5)" />
                 <XAxis dataKey="month"    tick={{ fill: "#8ba3c7", fontSize: 11 }} />
                 <YAxis tick={{ fill: "#8ba3c7", fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
@@ -241,7 +266,7 @@ export default function DashboardPage() {
               <span className="text-xs text-[#8ba3c7] bg-[#1a3356]/50 px-2 py-1 rounded-lg">آخر 30 يوم</span>
             </div>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={mockActiveUsersData}>
+              <BarChart data={activeUsersData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(30,58,95,0.5)" />
                 <XAxis dataKey="date" tick={{ fill: "#8ba3c7", fontSize: 10 }} />
                 <YAxis tick={{ fill: "#8ba3c7", fontSize: 11 }} />
