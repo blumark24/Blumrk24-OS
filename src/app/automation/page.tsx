@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { useToast } from "@/contexts/ToastContext";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import AccessDenied from "@/components/ui/AccessDenied";
 import { useTasks, useClients, useTransactions } from "@/hooks/useData";
 import { FUND_DISTRIBUTION, formatCurrency } from "@/lib/utils";
 import type { Task, Client, Transaction } from "@/types";
@@ -420,9 +419,5 @@ function AutomationContent() {
 }
 
 export default function AutomationPage() {
-  const { hasPermission } = usePermissions();
-  if (!hasPermission("manage_automations")) {
-    return <DashboardLayout><AccessDenied /></DashboardLayout>;
-  }
   return <AutomationContent />;
 }

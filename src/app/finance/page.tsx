@@ -6,7 +6,6 @@ import { FUND_DISTRIBUTION, formatCurrency } from "@/lib/utils";
 import { DollarSign, Plus, TrendingUp, TrendingDown, X, ArrowUpRight } from "lucide-react";
 import type { Transaction } from "@/types";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import AccessDenied from "@/components/ui/AccessDenied";
 import { useTransactions } from "@/hooks/useData";
 import { useToast } from "@/contexts/ToastContext";
 import {
@@ -306,9 +305,5 @@ function FinanceContent() {
 }
 
 export default function FinancePage() {
-  const { hasPermission } = usePermissions();
-  if (!hasPermission("manage_finance")) {
-    return <DashboardLayout><AccessDenied /></DashboardLayout>;
-  }
   return <FinanceContent />;
 }

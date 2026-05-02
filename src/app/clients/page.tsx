@@ -7,7 +7,6 @@ import { UserCircle, Plus, Search, Phone, MapPin, Package, Edit2, Trash2, X } fr
 import type { ClientStatus, PackageType } from "@/types";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useAuth } from "@/contexts/AuthContext";
-import AccessDenied from "@/components/ui/AccessDenied";
 import { useClients } from "@/hooks/useData";
 import { useToast } from "@/contexts/ToastContext";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -344,9 +343,5 @@ function ClientsContent() {
 }
 
 export default function ClientsPage() {
-  const { hasPermission } = usePermissions();
-  if (!hasPermission("manage_clients")) {
-    return <DashboardLayout><AccessDenied /></DashboardLayout>;
-  }
   return <ClientsContent />;
 }

@@ -9,7 +9,6 @@ import { useTasks } from "@/hooks/useData";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import AccessDenied from "@/components/ui/AccessDenied";
 
 const STATUS_COLUMNS: { key: TaskStatus; label: string; color: string }[] = [
   { key: "جديدة",             label: "جديدة",             color: "#22d3ee" },
@@ -299,9 +298,5 @@ function TasksContent() {
 }
 
 export default function TasksPage() {
-  const { hasPermission } = usePermissions();
-  if (!hasPermission("manage_tasks")) {
-    return <DashboardLayout><AccessDenied /></DashboardLayout>;
-  }
   return <TasksContent />;
 }

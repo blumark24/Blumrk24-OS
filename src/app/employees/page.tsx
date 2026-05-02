@@ -6,7 +6,6 @@ import { DEPARTMENTS } from "@/lib/utils";
 import { Users, Plus, Search, Star, Edit2, Trash2, X } from "lucide-react";
 import type { UserRole } from "@/types";
 import { usePermissions, ROLE_LABELS } from "@/contexts/PermissionsContext";
-import AccessDenied from "@/components/ui/AccessDenied";
 import { useEmployees } from "@/hooks/useData";
 import { useToast } from "@/contexts/ToastContext";
 
@@ -323,9 +322,5 @@ function EmployeesContent() {
 }
 
 export default function EmployeesPage() {
-  const { hasPermission } = usePermissions();
-  if (!hasPermission("manage_users")) {
-    return <DashboardLayout><AccessDenied /></DashboardLayout>;
-  }
   return <EmployeesContent />;
 }
