@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { FUND_DISTRIBUTION, formatCurrency } from "@/lib/utils";
 import { DollarSign, Plus, TrendingUp, TrendingDown, X, ArrowUpRight } from "lucide-react";
@@ -14,12 +14,7 @@ import {
   PieChart, Pie, Cell,
 } from "recharts";
 
-const MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو"];
-const monthlyData = MONTHS.map((month, i) => ({
-  month,
-  income:  200000 + i * 40000 + Math.random() * 50000,
-  expense: 80000  + i * 10000 + Math.random() * 20000,
-}));
+const ARABIC_MONTHS = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 
 function FinanceContent() {
   const { data: transactions, loading, insert } = useTransactions();
@@ -38,6 +33,24 @@ function FinanceContent() {
   const totalIncome  = transactions.filter((t) => t.type === "دخل").reduce((s, t) => s + t.amount, 0);
   const totalExpense = transactions.filter((t) => t.type === "مصروف").reduce((s, t) => s + t.amount, 0);
   const netProfit    = totalIncome - totalExpense;
+
+  const monthlyData = useMemo(() => {
+    const map: Record<string, { income: number; expense: number }> = {};
+    transactions.forEach((tx) => {
+      const d = new Date(tx.date || "");
+      if (isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (!map[key]) map[key] = { income: 0, expense: 0 };
+      if (tx.type === "دخل") map[key].income += tx.amount;
+      else map[key].expense += tx.amount;
+    });
+    const now = new Date();
+    return Array.from({ length: 6 }, (_, i) => {
+      const d   = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      return { month: ARABIC_MONTHS[d.getMonth()], income: map[key]?.income ?? 0, expense: map[key]?.expense ?? 0 };
+    });
+  }, [transactions]);
 
   const fundBalances = Object.entries(FUND_DISTRIBUTION).map(([key, config]) => ({
     key,

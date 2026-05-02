@@ -7,6 +7,7 @@ import type { TaskStatus, TaskPriority } from "@/types";
 import { cn } from "@/lib/utils";
 import { useTasks } from "@/hooks/useData";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import AccessDenied from "@/components/ui/AccessDenied";
 
@@ -30,6 +31,7 @@ type ViewMode = "kanban" | "list";
 function TasksContent() {
   const { data: tasks, loading, insert, update } = useTasks();
   const { userRole } = usePermissions();
+  const { user } = useAuth();
   const toast = useToast();
   const isAdmin = userRole === "super_admin";
   const [view, setView] = useState<ViewMode>("kanban");
@@ -48,7 +50,7 @@ function TasksContent() {
     if (!form.title) return;
     try {
       await insert({
-        assigneeId: "1",
+        assigneeId: user?.id ?? "",
         ...form,
       });
       toast.success("تمت إضافة المهمة بنجاح");

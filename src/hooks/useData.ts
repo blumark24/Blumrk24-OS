@@ -7,6 +7,8 @@ import {
   insertBoardMember,
   updateBoardMember,
   deleteBoardMember,
+  logActivity,
+  createNotification,
 } from "@/lib/db";
 import type { Client, Task, Transaction, Employee, Project, Activity } from "@/types";
 import type { BoardMember } from "@/lib/db";
@@ -207,6 +209,15 @@ function useAsyncData<T>(fetcher: () => Promise<T>, fallback: T) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Refetch when a session becomes available (handles the case where RLS
+  // returns empty results because the component mounted before auth resolved)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) load();
+    });
+    return () => subscription.unsubscribe();
+  }, [load]);
+
   return { data, setData, loading, error, refetch: load };
 }
 
@@ -236,19 +247,29 @@ export function useClients() {
   const insert = useCallback(async (item: Omit<Client, "id" | "createdAt">) => {
     const { error } = await supabase.from("clients").insert([clientToDB(item)]);
     if (error) throw new Error(error.message);
-    await refetch();
+    await Promise.all([
+      refetch(),
+      logActivity("client", `تمت إضافة عميل جديد: ${item.name}`, "👤"),
+      createNotification("client_followup", "عميل جديد", `تمت إضافة العميل ${item.name}`, "/clients"),
+    ]);
   }, [refetch]);
 
   const update = useCallback(async (id: string, changes: Partial<Client>) => {
     const { error } = await supabase.from("clients").update(clientUpdateToDB(changes)).eq("id", id);
     if (error) throw new Error(error.message);
-    await refetch();
+    await Promise.all([
+      refetch(),
+      logActivity("client", `تم تحديث بيانات العميل`, "✏️"),
+    ]);
   }, [refetch]);
 
   const remove = useCallback(async (id: string) => {
     const { error } = await supabase.from("clients").delete().eq("id", id);
     if (error) throw new Error(error.message);
-    await refetch();
+    await Promise.all([
+      refetch(),
+      logActivity("client", `تم حذف عميل`, "🗑️"),
+    ]);
   }, [refetch]);
 
   return { ...result, insert, update, remove };
@@ -280,19 +301,29 @@ export function useTasks() {
   const insert = useCallback(async (item: Omit<Task, "id" | "createdAt">) => {
     const { error } = await supabase.from("tasks").insert([taskToDB(item)]);
     if (error) throw new Error(error.message);
-    await refetch();
+    await Promise.all([
+      refetch(),
+      logActivity("task", `تمت إضافة مهمة جديدة: ${item.title}`, "✅"),
+      createNotification("task_due", "مهمة جديدة", `تمت إضافة المهمة: ${item.title}`, "/tasks"),
+    ]);
   }, [refetch]);
 
   const update = useCallback(async (id: string, changes: Partial<Task>) => {
     const { error } = await supabase.from("tasks").update(taskUpdateToDB(changes)).eq("id", id);
     if (error) throw new Error(error.message);
-    await refetch();
+    await Promise.all([
+      refetch(),
+      logActivity("task", `تم تحديث حالة المهمة${changes.status ? `: ${changes.status}` : ""}`, "🔄"),
+    ]);
   }, [refetch]);
 
   const remove = useCallback(async (id: string) => {
     const { error } = await supabase.from("tasks").delete().eq("id", id);
     if (error) throw new Error(error.message);
-    await refetch();
+    await Promise.all([
+      refetch(),
+      logActivity("task", `تم حذف مهمة`, "🗑️"),
+    ]);
   }, [refetch]);
 
   return { ...result, insert, update, remove };
@@ -324,7 +355,11 @@ export function useTransactions() {
   const insert = useCallback(async (item: Omit<Transaction, "id">) => {
     const { error } = await supabase.from("transactions").insert([item]);
     if (error) throw new Error(error.message);
-    await refetch();
+    await Promise.all([
+      refetch(),
+      logActivity("finance", `${item.type === "دخل" ? "دخل" : "مصروف"} جديد: ${item.description} (${item.amount} SAR)`, item.type === "دخل" ? "💰" : "💸"),
+      createNotification("invoice_due", `معاملة مالية جديدة`, `${item.type}: ${item.description} — ${item.amount} SAR`, "/finance"),
+    ]);
   }, [refetch]);
 
   return { ...result, insert };
@@ -356,19 +391,28 @@ export function useEmployees() {
   const insert = useCallback(async (item: Omit<Employee, "id">) => {
     const { error } = await supabase.from("employees").insert([employeeToDB(item)]);
     if (error) throw new Error(error.message);
-    await refetch();
+    await Promise.all([
+      refetch(),
+      logActivity("employee", `تمت إضافة موظف جديد: ${item.name}`, "👥"),
+    ]);
   }, [refetch]);
 
   const update = useCallback(async (id: string, changes: Partial<Employee>) => {
     const { error } = await supabase.from("employees").update(employeeUpdateToDB(changes)).eq("id", id);
     if (error) throw new Error(error.message);
-    await refetch();
+    await Promise.all([
+      refetch(),
+      logActivity("employee", `تم تحديث بيانات موظف`, "✏️"),
+    ]);
   }, [refetch]);
 
   const remove = useCallback(async (id: string) => {
     const { error } = await supabase.from("employees").delete().eq("id", id);
     if (error) throw new Error(error.message);
-    await refetch();
+    await Promise.all([
+      refetch(),
+      logActivity("employee", `تم حذف موظف`, "🗑️"),
+    ]);
   }, [refetch]);
 
   return { ...result, insert, update, remove };
