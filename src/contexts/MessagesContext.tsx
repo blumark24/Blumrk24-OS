@@ -8,7 +8,7 @@ import {
   useCallback,
   ReactNode,
 } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import {
   getMessages,
   markMessageRead,
@@ -43,27 +43,27 @@ export function MessagesProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<AppMessage[]>([]);
 
   const load = useCallback(async () => {
-    const raw = await getMessages();
-    setMessages(
-      raw.map((m) => ({
-        id:      m.id,
-        from:    m.sender_name,
-        avatar:  m.sender_avatar,
-        subject: m.subject,
-        preview: m.content,
-        at:      m.created_at,
-        read:    m.read,
-      }))
-    );
+    try {
+      const raw = await getMessages();
+      setMessages(
+        raw.map((m) => ({
+          id:      m.id,
+          from:    m.sender_name,
+          avatar:  m.sender_avatar,
+          subject: m.subject,
+          preview: m.content,
+          at:      m.created_at,
+          read:    m.read,
+        }))
+      );
+    } catch {
+      // silently keep empty on error
+    }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  // Realtime subscription
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
     const channel = supabase
       .channel("messages-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => load())

@@ -9,7 +9,7 @@ import {
   ReactNode,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { getUserProfile } from "@/lib/db";
 
 export interface AuthUser {
@@ -26,13 +26,6 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
 }
-
-// Demo users for when Supabase is not configured
-const DEMO_USERS: (AuthUser & { password: string })[] = [
-  { id: "1", name: "أحمد محمد",  email: "admin@blumark24.com",   password: "admin123",   role: "super_admin",    avatar: "أم" },
-  { id: "2", name: "فاطمة خالد", email: "finance@blumark24.com", password: "finance123", role: "finance_manager", avatar: "فخ" },
-  { id: "3", name: "سارة أحمد",  email: "sales@blumark24.com",   password: "sales123",   role: "attack_manager",  avatar: "سأ" },
-];
 
 const PUBLIC_PATHS = ["/auth"];
 
@@ -52,6 +45,17 @@ function setSessionCookie(value: string) {
   }
 }
 
+async function buildUser(id: string, email: string): Promise<AuthUser> {
+  const profile = await getUserProfile(id);
+  return {
+    id,
+    email,
+    name:   profile?.name   ?? email,
+    role:   profile?.role   ?? "employee",
+    avatar: profile?.avatar,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router   = useRouter();
   const pathname = usePathname();
@@ -60,40 +64,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      // Demo mode: no session persistence across refreshes
-      setLoading(false);
-      return;
-    }
-
-    // Restore session from Supabase
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        const profile = await getUserProfile(session.user.id);
-        setUser({
-          id: session.user.id,
-          email: session.user.email ?? "",
-          name: profile?.name ?? session.user.email ?? "",
-          role: profile?.role ?? "employee",
-          avatar: profile?.avatar,
-        });
+        const u = await buildUser(session.user.id, session.user.email ?? "");
+        setUser(u);
         setSessionCookie("1");
       }
       setLoading(false);
     });
 
-    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         if (session?.user) {
-          const profile = await getUserProfile(session.user.id);
-          setUser({
-            id: session.user.id,
-            email: session.user.email ?? "",
-            name: profile?.name ?? session.user.email ?? "",
-            role: profile?.role ?? "employee",
-            avatar: profile?.avatar,
-          });
+          const u = await buildUser(session.user.id, session.user.email ?? "");
+          setUser(u);
           setSessionCookie("1");
         } else {
           setUser(null);
@@ -118,21 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
-      if (!isSupabaseConfigured) {
-        // Demo mode fallback
-        await new Promise((r) => setTimeout(r, 700));
-        const found = DEMO_USERS.find((u) => u.email === email && u.password === password);
-        if (!found) return { ok: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
-        const { password: _pw, ...authUser } = found;
-        setUser(authUser);
-        setSessionCookie("1");
-        router.replace("/");
-        return { ok: true };
-      }
-
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) return { ok: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
-      // onAuthStateChange will update user state + cookie
+      if (error) {
+        return { ok: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
+      }
       router.replace("/");
       return { ok: true };
     },
@@ -140,9 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
-    }
+    await supabase.auth.signOut();
     setUser(null);
     setSessionCookie("");
     router.replace("/auth");

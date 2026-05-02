@@ -1,10 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
+const supabaseUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL      ?? "";
+const supabaseKey  = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// createClient requires non-empty strings; use placeholders so the module
+// loads cleanly in environments where the vars are not yet set.
+export const supabase = createClient(
+  supabaseUrl  || "https://placeholder.supabase.co",
+  supabaseKey  || "placeholder-anon-key",
+);
 
-export const isSupabaseConfigured =
-  !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
-  !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+export const isSupabaseConfigured = !!supabaseUrl && !!supabaseKey;
