@@ -175,7 +175,7 @@ export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: ()
             className="absolute top-full mt-2 w-full rounded-2xl border border-[#1e3a5f] px-4 py-3 text-sm text-[#8ba3c7] z-50"
             style={{ background: "rgba(13,31,60,0.98)" }}
           >
-            لا توجد نتائج لـ "{query}"
+            لا توجد نتائج لـ &quot;{query}&quot;
           </div>
         )}
       </div>
