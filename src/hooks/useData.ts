@@ -10,7 +10,7 @@ import {
   logActivity,
   createNotification,
 } from "@/lib/db";
-import type { Client, Task, Transaction, Employee, Project, Activity } from "@/types";
+import type { Client, Task, Transaction, Employee, Project, Activity, StrategyPhase } from "@/types";
 import type { BoardMember } from "@/lib/db";
 
 // ─── camelCase ↔ snake_case mappers ──────────────────────────────────────────
@@ -480,6 +480,73 @@ export function useBoardMembers() {
   }, [refetch]);
 
   return { ...result, insert, update, remove };
+}
+
+// ─── Strategy Phases ─────────────────────────────────────────────────────────
+
+function strategyPhaseFromDB(row: Record<string, unknown>): StrategyPhase {
+  return {
+    id:             row.id              as number,
+    title:          row.title           as string,
+    description:    row.description     as string,
+    progress:       row.progress        as number,
+    budget:         row.budget          as number,
+    startDate:      row.start_date      as string,
+    endDate:        row.end_date        as string,
+    targetClients:  row.target_clients  as number,
+    currentClients: row.current_clients as number,
+    goals:          (row.goals          as string[]) ?? [],
+    status:         row.status          as StrategyPhase["status"],
+  };
+}
+
+function strategyPhaseUpdateToDB(changes: Partial<StrategyPhase>): Record<string, unknown> {
+  const map: Record<string, unknown> = {};
+  if (changes.title          !== undefined) map.title           = changes.title;
+  if (changes.description    !== undefined) map.description     = changes.description;
+  if (changes.progress       !== undefined) map.progress        = changes.progress;
+  if (changes.budget         !== undefined) map.budget          = changes.budget;
+  if (changes.startDate      !== undefined) map.start_date      = changes.startDate;
+  if (changes.endDate        !== undefined) map.end_date        = changes.endDate;
+  if (changes.targetClients  !== undefined) map.target_clients  = changes.targetClients;
+  if (changes.currentClients !== undefined) map.current_clients = changes.currentClients;
+  if (changes.goals          !== undefined) map.goals           = changes.goals;
+  if (changes.status         !== undefined) map.status          = changes.status;
+  map.updated_at = new Date().toISOString();
+  return map;
+}
+
+async function fetchStrategyPhases(): Promise<StrategyPhase[]> {
+  const { data, error } = await supabase
+    .from("strategy_phases")
+    .select("*")
+    .order("sort_order", { ascending: true });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Record<string, unknown>[]).map(strategyPhaseFromDB);
+}
+
+export function useStrategyPhases() {
+  const result = useAsyncData<StrategyPhase[]>(fetchStrategyPhases, []);
+  const { refetch } = result;
+
+  useEffect(() => {
+    const ch = supabase
+      .channel("strategy-phases-rt")
+      .on("postgres_changes", { event: "*", schema: "public", table: "strategy_phases" }, () => refetch())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [refetch]);
+
+  const update = useCallback(async (id: number, changes: Partial<StrategyPhase>) => {
+    const { error } = await supabase
+      .from("strategy_phases")
+      .update(strategyPhaseUpdateToDB(changes))
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+    await refetch();
+  }, [refetch]);
+
+  return { ...result, update };
 }
 
 // ─── Dashboard KPI ────────────────────────────────────────────────────────────
