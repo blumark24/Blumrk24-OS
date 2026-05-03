@@ -175,12 +175,14 @@ CREATE POLICY "employees: read"
   ON public.employees FOR SELECT
   USING (auth.role() = 'authenticated');
 
--- super_admin, defense_manager, attack_manager can write
+-- super_admin / known admin emails can write
 CREATE POLICY "employees: write"
   ON public.employees FOR ALL
   USING (
-    auth.role() = 'authenticated' AND
-    public.get_my_role() IN ('super_admin', 'defense_manager', 'attack_manager', 'board_member')
+    auth.role() = 'authenticated' AND (
+      (SELECT email FROM auth.users WHERE id = auth.uid()) IN ('blumark24@gmail.com', 'blumark.sa@gmail.com')
+      OR public.get_my_role() IN ('super_admin', 'defense_manager', 'attack_manager', 'board_member')
+    )
   );
 
 -- ============================================================
@@ -212,12 +214,14 @@ CREATE POLICY "clients: read"
   ON public.clients FOR SELECT
   USING (auth.role() = 'authenticated');
 
--- All managers can write clients
+-- All managers (and admin emails as fallback) can write clients
 CREATE POLICY "clients: write"
   ON public.clients FOR ALL
   USING (
-    auth.role() = 'authenticated' AND
-    public.get_my_role() IN ('super_admin', 'attack_manager', 'defense_manager', 'finance_manager', 'board_member')
+    auth.role() = 'authenticated' AND (
+      (SELECT email FROM auth.users WHERE id = auth.uid()) IN ('blumark24@gmail.com', 'blumark.sa@gmail.com')
+      OR public.get_my_role() IN ('super_admin', 'attack_manager', 'defense_manager', 'finance_manager', 'board_member')
+    )
   );
 
 -- ============================================================
@@ -276,8 +280,10 @@ CREATE POLICY "transactions: read"
 CREATE POLICY "transactions: write"
   ON public.transactions FOR ALL
   USING (
-    auth.role() = 'authenticated' AND
-    public.get_my_role() IN ('super_admin', 'finance_manager', 'board_member')
+    auth.role() = 'authenticated' AND (
+      (SELECT email FROM auth.users WHERE id = auth.uid()) IN ('blumark24@gmail.com', 'blumark.sa@gmail.com')
+      OR public.get_my_role() IN ('super_admin', 'finance_manager', 'board_member')
+    )
   );
 
 -- ============================================================
@@ -349,7 +355,12 @@ DROP POLICY IF EXISTS "board_members: admin write"        ON public.board_member
 
 CREATE POLICY "board_members: read"  ON public.board_members FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "board_members: write" ON public.board_members FOR ALL
-  USING (auth.role() = 'authenticated' AND public.get_my_role() IN ('super_admin', 'board_member'));
+  USING (
+    auth.role() = 'authenticated' AND (
+      (SELECT email FROM auth.users WHERE id = auth.uid()) IN ('blumark24@gmail.com', 'blumark.sa@gmail.com')
+      OR public.get_my_role() IN ('super_admin', 'board_member')
+    )
+  );
 
 -- ============================================================
 -- 9. MESSAGES

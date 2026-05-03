@@ -45,15 +45,16 @@ function BoardMemberModal({
   onClose,
 }: {
   member: BoardMember | null;
-  onSave: (data: Omit<BoardMember, "id">) => void;
+  onSave: (data: Omit<BoardMember, "id">) => Promise<void>;
   onClose: () => void;
 }) {
-  const [form, setForm] = useState(
+  const [form,   setForm]   = useState(
     member
       ? { name: member.name, role: member.role, email: member.email, phone: member.phone, status: member.status }
       : EMPTY_FORM
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -62,10 +63,15 @@ function BoardMemberModal({
     return e;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
-    onSave(form);
+    setSaving(true);
+    try {
+      await onSave(form);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -133,10 +139,13 @@ function BoardMemberModal({
         </div>
 
         <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="btn-secondary flex-1 py-2 text-sm">إلغاء</button>
-          <button onClick={handleSave} className="btn-primary flex-1 py-2 text-sm flex items-center justify-center gap-2">
-            <Save size={14} />
-            حفظ
+          <button onClick={onClose} disabled={saving} className="btn-secondary flex-1 py-2 text-sm">إلغاء</button>
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 py-2 text-sm flex items-center justify-center gap-2 disabled:opacity-50">
+            {saving
+              ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              : <Save size={14} />
+            }
+            {saving ? "جارٍ الحفظ..." : "حفظ"}
           </button>
         </div>
       </div>
@@ -273,7 +282,7 @@ export default function OrgPage() {
     setShowModal(true);
   };
 
-  const handleSave = useCallback(async (data: Omit<BoardMember, "id">) => {
+  const handleSave = useCallback(async (data: Omit<BoardMember, "id">): Promise<void> => {
     try {
       if (editMember) {
         await update(editMember.id, data);
@@ -284,8 +293,10 @@ export default function OrgPage() {
       }
       setShowModal(false);
       setEditMember(null);
-    } catch {
+    } catch (err) {
       toast.error("حدث خطأ أثناء حفظ البيانات");
+      console.error("[Board Member Save Error]", err);
+      throw err;
     }
   }, [editMember, insert, update, toast]);
 

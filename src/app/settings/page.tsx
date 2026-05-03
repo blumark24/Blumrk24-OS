@@ -7,8 +7,9 @@ import Link from "next/link";
 import {
   Settings, Users, Shield, Building2, Palette, Link2, Bell, Save,
   Check, Zap, ExternalLink, Clock, ToggleLeft, ToggleRight,
-  Plus, Pencil, UserX, UserCheck, X, Key,
+  Plus, Pencil, UserX, UserCheck, X, Key, Loader2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   usePermissions,
   ROLE_LABELS,
@@ -49,55 +50,24 @@ const AUTOMATION_RULES_SUMMARY = [
 
 const DEPARTMENTS = ["الإدارة العليا", "وكالة الدفاع", "وكالة الهجوم", "المالية", "تقنية المعلومات"];
 
-// ─── Add User Modal ────────────────────────────────────────────────────────────
-
-function AddUserModal({ onSave, onClose }: { onSave: (u: Omit<ManagedUser, "userId">) => void; onClose: () => void }) {
-  const [form, setForm] = useState({ name: "", email: "", role: "employee" as UserRole, department: DEPARTMENTS[0], isActive: true });
-  const [error, setError] = useState("");
-
-  const handleSave = () => {
-    if (!form.name.trim() || !form.email.trim()) { setError("الاسم والبريد الإلكتروني مطلوبان"); return; }
-    onSave(form);
-  };
-
+// Add user redirect banner (real user creation happens in /employees)
+function AddUserBanner({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
-      <div className="glass-card p-6 w-full max-w-md space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-white font-heading font-bold text-lg flex items-center gap-2">
-            <Plus size={16} className="text-[#22d3ee]" />
-            إضافة مستخدم جديد
-          </h3>
-          <button onClick={onClose} className="text-[#8ba3c7] hover:text-white"><X size={18} /></button>
+      <div className="glass-card p-6 w-full max-w-md space-y-4 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-[#22d3ee]/10 flex items-center justify-center mx-auto">
+          <Users size={24} className="text-[#22d3ee]" />
         </div>
-        {error && <p className="text-red-400 text-xs">{error}</p>}
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs text-[#8ba3c7] mb-1.5">الاسم الكامل *</label>
-            <input className="input-dark text-sm" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="اسم المستخدم" />
-          </div>
-          <div>
-            <label className="block text-xs text-[#8ba3c7] mb-1.5">البريد الإلكتروني *</label>
-            <input type="email" className="input-dark text-sm" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="user@blumark24.com" />
-          </div>
-          <div>
-            <label className="block text-xs text-[#8ba3c7] mb-1.5">الدور</label>
-            <select className="input-dark text-sm" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}>
-              {ALL_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-[#8ba3c7] mb-1.5">القسم</label>
-            <select className="input-dark text-sm" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
-              {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="flex gap-3 pt-2">
+        <h3 className="text-white font-heading font-bold text-lg">إضافة موظف / مستخدم</h3>
+        <p className="text-[#8ba3c7] text-sm">
+          لإضافة موظف جديد، انتقل إلى صفحة الموظفين حيث يمكنك إضافة بياناته وربطه بالنظام بالكامل.
+        </p>
+        <div className="flex gap-3">
           <button onClick={onClose} className="btn-secondary flex-1 py-2 text-sm">إلغاء</button>
-          <button onClick={handleSave} className="btn-primary flex-1 py-2 text-sm flex items-center justify-center gap-2">
-            <Save size={14} />
-            إضافة
+          <button onClick={() => { onClose(); router.push("/employees"); }} className="btn-primary flex-1 py-2 text-sm flex items-center justify-center gap-2">
+            <Users size={14} />
+            الانتقال للموظفين
           </button>
         </div>
       </div>
@@ -108,12 +78,13 @@ function AddUserModal({ onSave, onClose }: { onSave: (u: Omit<ManagedUser, "user
 // ─── Permissions Tab ──────────────────────────────────────────────────────────
 
 function PermissionsTab() {
-  const { managedUsers, rolePermissions, updateUserRole, toggleUserStatus, addManagedUser, updateRolePermissions, saveAll } = usePermissions();
-  const toast = useToast();
-  const [selectedRole, setSelectedRole] = useState<UserRole>("super_admin");
-  const [localPerms, setLocalPerms] = useState<Record<UserRole, Permission[]>>({ ...rolePermissions });
-  const [showAddUser, setShowAddUser] = useState(false);
-  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const { managedUsers, rolePermissions, updateUserRole, toggleUserStatus, updateRolePermissions } = usePermissions();
+  const toast  = useToast();
+  const [selectedRole,   setSelectedRole]   = useState<UserRole>("super_admin");
+  const [localPerms,     setLocalPerms]     = useState<Record<UserRole, Permission[]>>({ ...rolePermissions });
+  const [showAddUser,    setShowAddUser]    = useState(false);
+  const [editingUserId,  setEditingUserId]  = useState<string | null>(null);
+  const [savingPerms,    setSavingPerms]    = useState(false);
 
   const handleTogglePerm = (perm: Permission) => {
     setLocalPerms((prev) => {
@@ -127,12 +98,19 @@ function PermissionsTab() {
     toast.info(`تم إعادة ضبط صلاحيات ${ROLE_LABELS[selectedRole]}`);
   };
 
-  const handleSavePerms = () => {
-    Object.entries(localPerms).forEach(([role, perms]) => {
-      updateRolePermissions(role as UserRole, perms);
-    });
-    saveAll();
-    toast.success("تم حفظ الصلاحيات بنجاح — ستُطبَّق فور تسجيل الدخول التالي");
+  const handleSavePerms = async () => {
+    setSavingPerms(true);
+    try {
+      Object.entries(localPerms).forEach(([role, perms]) => {
+        updateRolePermissions(role as UserRole, perms);
+      });
+      toast.success("تم حفظ الصلاحيات بنجاح");
+    } catch (err) {
+      toast.error("حدث خطأ أثناء حفظ الصلاحيات");
+      console.error("[Permissions Save Error]", err);
+    } finally {
+      setSavingPerms(false);
+    }
   };
 
   const handleRoleChange = (userId: string, role: UserRole) => {
@@ -144,12 +122,6 @@ function PermissionsTab() {
   const handleToggleStatus = (userId: string, name: string, isActive: boolean) => {
     toggleUserStatus(userId);
     toast.success(isActive ? `تم تعطيل ${name}` : `تم تفعيل ${name}`);
-  };
-
-  const handleAddUser = (u: Omit<ManagedUser, "userId">) => {
-    addManagedUser(u);
-    setShowAddUser(false);
-    toast.success(`تمت إضافة ${u.name} بنجاح`);
   };
 
   return (
@@ -238,9 +210,9 @@ function PermissionsTab() {
           </div>
           <div className="flex gap-2">
             <button onClick={handleResetRole} className="btn-secondary py-1.5 px-3 text-xs">إعادة ضبط</button>
-            <button onClick={handleSavePerms} className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1">
-              <Save size={12} />
-              حفظ الصلاحيات
+            <button onClick={handleSavePerms} disabled={savingPerms} className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1 disabled:opacity-50">
+              {savingPerms ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+              {savingPerms ? "جارٍ الحفظ..." : "حفظ الصلاحيات"}
             </button>
           </div>
         </div>
@@ -292,7 +264,7 @@ function PermissionsTab() {
         </div>
       </div>
 
-      {showAddUser && <AddUserModal onSave={handleAddUser} onClose={() => setShowAddUser(false)} />}
+      {showAddUser && <AddUserBanner onClose={() => setShowAddUser(false)} />}
     </div>
   );
 }
@@ -303,8 +275,9 @@ function SettingsContent() {
   const toast = useToast();
   const { hasPermission } = usePermissions();
 
-  const [activeTab, setActiveTab] = useState("general");
-  const [saved,      setSaved]    = useState(false);
+  const [activeTab,  setActiveTab]  = useState("general");
+  const [saved,      setSaved]      = useState(false);
+  const [saving,     setSaving]     = useState(false);
   const [companyForm, setCompanyForm] = useState({
     name: "Blumark24", tagline: "نظام إدارة الأعمال بالذكاء الاصطناعي",
     email: "info@blumark24.com", phone: "0550000000", website: "blumark24.com", city: "جدة",
@@ -323,17 +296,21 @@ function SettingsContent() {
   }, []);
 
   const handleSave = async () => {
+    setSaving(true);
     try {
       await Promise.all([
-        setSystemSetting("company_info", companyForm),
+        setSystemSetting("company_info",  companyForm),
         setSystemSetting("notifications", notifs),
-        setSystemSetting("appearance", { darkMode }),
+        setSystemSetting("appearance",    { darkMode }),
       ]);
       setSaved(true);
       toast.success("تم حفظ الإعدادات بنجاح");
       setTimeout(() => setSaved(false), 2500);
-    } catch {
+    } catch (err) {
       toast.error("حدث خطأ أثناء حفظ الإعدادات");
+      console.error("[Settings Save Error]", err);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -355,9 +332,12 @@ function SettingsContent() {
             <p className="text-[#8ba3c7] text-sm mt-1">إدارة إعدادات النظام والتفضيلات</p>
           </div>
           {activeTab !== "permissions" && (
-            <button onClick={handleSave} className="btn-primary flex items-center gap-2">
-              {saved ? <Check size={16} className="text-emerald-400" /> : <Save size={16} />}
-              {saved ? "تم الحفظ!" : "حفظ التغييرات"}
+            <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2 disabled:opacity-50">
+              {saving
+                ? <Loader2 size={16} className="animate-spin" />
+                : saved ? <Check size={16} className="text-emerald-400" /> : <Save size={16} />
+              }
+              {saving ? "جارٍ الحفظ..." : saved ? "تم الحفظ!" : "حفظ التغييرات"}
             </button>
           )}
         </div>
