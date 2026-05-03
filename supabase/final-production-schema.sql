@@ -175,12 +175,14 @@ CREATE POLICY "employees: read"
   ON public.employees FOR SELECT
   USING (auth.role() = 'authenticated');
 
--- super_admin, defense_manager, attack_manager can write
+-- super_admin / known admin emails can write
 CREATE POLICY "employees: write"
   ON public.employees FOR ALL
   USING (
-    auth.role() = 'authenticated' AND
-    public.get_my_role() IN ('super_admin', 'defense_manager', 'attack_manager', 'board_member')
+    auth.role() = 'authenticated' AND (
+      (SELECT email FROM auth.users WHERE id = auth.uid()) IN ('blumark24@gmail.com', 'blumark.sa@gmail.com')
+      OR public.get_my_role() IN ('super_admin', 'defense_manager', 'attack_manager', 'board_member')
+    )
   );
 
 -- ============================================================
@@ -212,12 +214,14 @@ CREATE POLICY "clients: read"
   ON public.clients FOR SELECT
   USING (auth.role() = 'authenticated');
 
--- All managers can write clients
+-- All managers (and admin emails as fallback) can write clients
 CREATE POLICY "clients: write"
   ON public.clients FOR ALL
   USING (
-    auth.role() = 'authenticated' AND
-    public.get_my_role() IN ('super_admin', 'attack_manager', 'defense_manager', 'finance_manager', 'board_member')
+    auth.role() = 'authenticated' AND (
+      (SELECT email FROM auth.users WHERE id = auth.uid()) IN ('blumark24@gmail.com', 'blumark.sa@gmail.com')
+      OR public.get_my_role() IN ('super_admin', 'attack_manager', 'defense_manager', 'finance_manager', 'board_member')
+    )
   );
 
 -- ============================================================
@@ -276,8 +280,10 @@ CREATE POLICY "transactions: read"
 CREATE POLICY "transactions: write"
   ON public.transactions FOR ALL
   USING (
-    auth.role() = 'authenticated' AND
-    public.get_my_role() IN ('super_admin', 'finance_manager', 'board_member')
+    auth.role() = 'authenticated' AND (
+      (SELECT email FROM auth.users WHERE id = auth.uid()) IN ('blumark24@gmail.com', 'blumark.sa@gmail.com')
+      OR public.get_my_role() IN ('super_admin', 'finance_manager', 'board_member')
+    )
   );
 
 -- ============================================================
@@ -349,7 +355,12 @@ DROP POLICY IF EXISTS "board_members: admin write"        ON public.board_member
 
 CREATE POLICY "board_members: read"  ON public.board_members FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "board_members: write" ON public.board_members FOR ALL
-  USING (auth.role() = 'authenticated' AND public.get_my_role() IN ('super_admin', 'board_member'));
+  USING (
+    auth.role() = 'authenticated' AND (
+      (SELECT email FROM auth.users WHERE id = auth.uid()) IN ('blumark24@gmail.com', 'blumark.sa@gmail.com')
+      OR public.get_my_role() IN ('super_admin', 'board_member')
+    )
+  );
 
 -- ============================================================
 -- 9. MESSAGES
@@ -432,6 +443,61 @@ CREATE POLICY "system_settings: read"
 CREATE POLICY "system_settings: write"
   ON public.system_settings FOR ALL
   USING (auth.role() = 'authenticated' AND public.get_my_role() IN ('super_admin', 'board_member'));
+
+-- ============================================================
+-- 12. STRATEGY PHASES
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.strategy_phases (
+  id              SERIAL PRIMARY KEY,
+  title           TEXT NOT NULL,
+  description     TEXT NOT NULL DEFAULT '',
+  progress        INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+  budget          NUMERIC(15,2) NOT NULL DEFAULT 0,
+  start_date      DATE NOT NULL,
+  end_date        DATE NOT NULL,
+  target_clients  INTEGER NOT NULL DEFAULT 0,
+  current_clients INTEGER NOT NULL DEFAULT 0,
+  goals           TEXT[] NOT NULL DEFAULT '{}',
+  status          TEXT NOT NULL DEFAULT 'قادمة' CHECK (status IN ('مكتملة', 'جارية', 'قادمة')),
+  sort_order      INTEGER NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.strategy_phases ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "strategy_phases: read"  ON public.strategy_phases;
+DROP POLICY IF EXISTS "strategy_phases: write" ON public.strategy_phases;
+
+CREATE POLICY "strategy_phases: read"
+  ON public.strategy_phases FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "strategy_phases: write"
+  ON public.strategy_phases FOR ALL
+  USING (public.get_my_role() IN ('super_admin', 'board_member'));
+
+-- Seed initial phases (only if table is empty)
+INSERT INTO public.strategy_phases
+  (title, description, progress, budget, start_date, end_date, target_clients, current_clients, goals, status, sort_order)
+SELECT * FROM (VALUES
+  ('المرحلة الأولى: الانطلاق', '10 عملاء وتطوير المشروع الأساسي', 100, 50000, '2023-01-01', '2023-06-30', 10, 10,
+   ARRAY['بناء فريق العمل الأساسي', 'اكتساب أول 10 عملاء', 'تطوير النظام الأساسي', 'إنشاء هوية العلامة التجارية'],
+   'مكتملة', 1),
+  ('المرحلة الثانية: النمو', '25 عميل + توظيف + تطوير النظام', 72, 150000, '2023-07-01', '2024-06-30', 25, 18,
+   ARRAY['الوصول لـ25 عميل', 'توظيف 5 موظفين جدد', 'تطوير نظام Blumark24 OS', 'تطوير خدمات الذكاء الاصطناعي'],
+   'جارية', 2),
+  ('المرحلة الثالثة: التوسع', 'مكتب مكة + المطاعم والمقاهي والبقالات', 20, 300000, '2024-07-01', '2025-03-31', 60, 12,
+   ARRAY['افتتاح مكتب في مكة', 'استهداف قطاع المطاعم والمقاهي', 'تطوير حلول للبقالات', 'شراكات استراتيجية'],
+   'قادمة', 3),
+  ('المرحلة الرابعة: التميز', 'تنفيذ البراند والتجهيزات الاحترافية', 0, 500000, '2025-04-01', '2025-12-31', 120, 0,
+   ARRAY['إطلاق تجهيزات احترافية', 'تطوير منصة SaaS', 'برنامج الشراكة مع الشركاء', 'الاعتراف الوطني بالعلامة'],
+   'قادمة', 4),
+  ('المرحلة الخامسة: الريادة', 'B2G + منصة فرص + المنافسات الحكومية', 0, 1000000, '2026-01-01', '2026-12-31', 250, 0,
+   ARRAY['الدخول في العقود الحكومية (B2G)', 'إطلاق منصة الفرص الرقمية', 'المشاركة في المنافسات الحكومية', 'الانتشار الوطني الكامل'],
+   'قادمة', 5)
+) AS v(title, description, progress, budget, start_date, end_date, target_clients, current_clients, goals, status, sort_order)
+WHERE NOT EXISTS (SELECT 1 FROM public.strategy_phases LIMIT 1);
 
 -- ============================================================
 -- ENSURE super_admin FOR KNOWN ADMIN ACCOUNTS

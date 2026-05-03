@@ -37,7 +37,8 @@ function ClientsContent() {
   const [statusFilter, setStatusFilter] = useState<ClientStatus | "الكل">("الكل");
   const [cityFilter, setCityFilter] = useState("الكل");
   const [showModal, setShowModal] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
+  const [editId,   setEditId]   = useState<string | null>(null);
+  const [saving,   setSaving]   = useState(false);
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -89,7 +90,8 @@ function ClientsContent() {
   };
 
   const handleSave = async () => {
-    if (!form.name) return;
+    if (!form.name.trim()) { toast.error("اسم العميل مطلوب"); return; }
+    setSaving(true);
     try {
       const payload = { ...form, contractValue: Number(form.contractValue) };
       if (editId) {
@@ -100,18 +102,22 @@ function ClientsContent() {
         toast.success("تمت إضافة العميل بنجاح");
       }
       setShowModal(false);
-    } catch {
+    } catch (err) {
       toast.error("حدث خطأ أثناء حفظ العميل");
+      console.error("[Client Save Error]", err);
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("هل أنت متأكد؟")) return;
+    if (!confirm("هل أنت متأكد من الحذف؟")) return;
     try {
       await remove(id);
       toast.success("تم حذف العميل بنجاح");
-    } catch {
+    } catch (err) {
       toast.error("حدث خطأ أثناء حذف العميل");
+      console.error("[Client Delete Error]", err);
     }
   };
 
@@ -333,8 +339,11 @@ function ClientsContent() {
               </div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={handleSave} className="btn-primary flex-1">{editId ? "حفظ" : "إضافة"}</button>
-              <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">إلغاء</button>
+              <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                {saving ? "جارٍ الحفظ..." : editId ? "حفظ" : "إضافة"}
+              </button>
+              <button onClick={() => setShowModal(false)} disabled={saving} className="btn-secondary flex-1">إلغاء</button>
             </div>
           </div>
         </div>

@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Bot, Send, RefreshCw, Sparkles, TrendingUp, Users, AlertTriangle, BarChart3 } from "lucide-react";
+import { useDashboardKPI } from "@/hooks/useData";
+import { useTasks } from "@/hooks/useData";
+import { formatCurrency } from "@/lib/utils";
 
 interface Message {
   id: string;
@@ -12,10 +15,10 @@ interface Message {
 }
 
 const QUICK_PROMPTS = [
-  { icon: "📊", label: "تحليل الأداء", prompt: "حلل أداء الفريق هذا الأسبوع وقدم توصيات لتحسينه" },
+  { icon: "📊", label: "تحليل الأداء",   prompt: "حلل أداء الفريق هذا الأسبوع وقدم توصيات لتحسينه" },
   { icon: "👥", label: "متابعة العملاء", prompt: "وش العملاء اللي محتاجين متابعة عاجلة الآن؟" },
   { icon: "💰", label: "تقليل المصاريف", prompt: "اقترح طرق فعّالة لتقليل المصاريف وتحسين الربحية" },
-  { icon: "📋", label: "تقرير شهري", prompt: "اكتب لي تقرير شهري شامل عن وضع الشركة" },
+  { icon: "📋", label: "تقرير شهري",     prompt: "اكتب لي تقرير شهري شامل عن وضع الشركة" },
   { icon: "🎯", label: "اقتراحات النمو", prompt: "ما هي أفضل استراتيجيات النمو للمرحلة القادمة؟" },
   { icon: "⚠️", label: "المهام المتأخرة", prompt: "أعطني قائمة بالمهام المتأخرة وخطة لمعالجتها" },
 ];
@@ -27,28 +30,45 @@ const INITIAL_MESSAGE: Message = {
   timestamp: new Date(),
 };
 
-const DEMO_RESPONSES: Record<string, string> = {
-  default: "بناءً على بيانات النظام الحالية، إليك التحليل المطلوب:\n\n📊 **الوضع العام:**\n- إجمالي العملاء: 1,248 عميل نشط\n- معدل إتمام المهام: 89%\n- رضا العملاء: 95%\n\n✅ **التوصيات:**\n1. التركيز على 6 عملاء محتملين في مرحلة التحويل\n2. تسريع المشاريع المتأخرة بتخصيص موارد إضافية\n3. زيادة التواصل مع العملاء النشطين لتحسين فرص التجديد\n\n🎯 **الأولويات الأسبوعية:**\n- إكمال 3 مهام عاجلة قبل نهاية الأسبوع\n- جدولة اجتماعات متابعة مع 5 عملاء رئيسيين",
-};
-
-const AI_CARDS = [
-  { icon: TrendingUp, label: "اكتشاف الأنماط غير الطبيعية", value: "لا توجد انحرافات", color: "#10b981" },
-  { icon: Users, label: "توازن عبء العمل", value: "85% متوازن", color: "#22d3ee" },
-  { icon: AlertTriangle, label: "تنبيهات المهام", value: "3 مهام متأخرة", color: "#f59e0b" },
-  { icon: BarChart3, label: "تقرير أسبوعي", value: "متاح الإثنين", color: "#a855f7" },
-];
+function buildAIResponse(
+  kpi: { activeClients: number; completedTasksPct: number; incompleteTasks: number; netProfit: number }
+): string {
+  return `بناءً على بيانات النظام الحالية، إليك التحليل المطلوب:\n\n📊 **الوضع العام:**\n- العملاء النشطين: ${kpi.activeClients} عميل\n- معدل إتمام المهام: ${kpi.completedTasksPct}%\n- صافي الربح: ${formatCurrency(kpi.netProfit)} SAR\n\n✅ **التوصيات:**\n1. ${kpi.incompleteTasks > 0 ? `معالجة ${kpi.incompleteTasks} مهمة غير مكتملة في أقرب وقت` : "جميع المهام مكتملة — أداء ممتاز"}\n2. تسريع المشاريع المتأخرة بتخصيص موارد إضافية\n3. زيادة التواصل مع العملاء النشطين لتحسين فرص التجديد\n\n🎯 **الأولويات الأسبوعية:**\n- ${kpi.incompleteTasks > 0 ? `إكمال ${Math.min(kpi.incompleteTasks, 3)} مهام عاجلة قبل نهاية الأسبوع` : "الحفاظ على الأداء الممتاز للمهام"}\n- جدولة اجتماعات متابعة مع العملاء الرئيسيين`;
+}
 
 function formatContent(content: string) {
   return content
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br/>');
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br/>");
 }
 
 export default function AIPage() {
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [input, setInput]       = useState("");
+  const [loading, setLoading]   = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+
+  const { kpi }                     = useDashboardKPI();
+  const { data: tasks }             = useTasks();
+
+  const overdueTasks = useMemo(
+    () => tasks.filter((t) => t.status === "متأخرة").length,
+    [tasks]
+  );
+
+  const workloadBalance = useMemo(() => {
+    if (tasks.length === 0) return "لا توجد مهام";
+    const done = tasks.filter((t) => t.status === "مكتملة").length;
+    const pct = Math.round((done / tasks.length) * 100);
+    return `${pct}% مكتمل`;
+  }, [tasks]);
+
+  const aiCards = useMemo(() => [
+    { icon: TrendingUp,     label: "العملاء النشطون",         value: `${kpi.activeClients} عميل`,   color: "#10b981" },
+    { icon: Users,          label: "نسبة إتمام المهام",       value: `${kpi.completedTasksPct}%`,   color: "#22d3ee" },
+    { icon: AlertTriangle,  label: "المهام المتأخرة",         value: `${overdueTasks} مهمة`,        color: overdueTasks > 0 ? "#f59e0b" : "#10b981" },
+    { icon: BarChart3,      label: "صافي الربح",              value: `${formatCurrency(kpi.netProfit)} SAR`, color: kpi.netProfit >= 0 ? "#a855f7" : "#ef4444" },
+  ], [kpi, overdueTasks]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -63,10 +83,9 @@ export default function AIPage() {
     setInput("");
     setLoading(true);
 
-    // Simulate AI response
-    await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+    await new Promise((r) => setTimeout(r, 900 + Math.random() * 600));
 
-    const aiResponse = DEMO_RESPONSES.default;
+    const aiResponse = buildAIResponse(kpi);
     const assistantMsg: Message = { id: String(Date.now() + 1), role: "assistant", content: aiResponse, timestamp: new Date() };
     setMessages((prev) => [...prev, assistantMsg]);
     setLoading(false);
@@ -96,16 +115,16 @@ export default function AIPage() {
           </div>
         </div>
 
-        {/* AI Insight Cards */}
+        {/* AI Insight Cards — real data */}
         <div className="grid grid-cols-4 gap-3">
-          {AI_CARDS.map((card) => (
+          {aiCards.map((card) => (
             <div key={card.label} className="glass-card p-4 flex items-center gap-3">
               <div className="p-2 rounded-xl flex-shrink-0" style={{ background: `${card.color}20` }}>
                 <card.icon size={16} style={{ color: card.color }} />
               </div>
               <div className="min-w-0">
                 <div className="text-xs text-[#8ba3c7] leading-tight">{card.label}</div>
-                <div className="text-sm font-medium text-white mt-0.5" style={{ color: card.color }}>{card.value}</div>
+                <div className="text-sm font-medium mt-0.5" style={{ color: card.color }}>{card.value}</div>
               </div>
             </div>
           ))}
@@ -132,7 +151,6 @@ export default function AIPage() {
 
           {/* Chat */}
           <div className="lg:col-span-3 glass-card flex flex-col overflow-hidden">
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
@@ -174,7 +192,6 @@ export default function AIPage() {
               <div ref={endRef} />
             </div>
 
-            {/* Input */}
             <div className="p-4 border-t border-[#1e3a5f]">
               <div className="flex gap-2">
                 <textarea

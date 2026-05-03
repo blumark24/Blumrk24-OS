@@ -1,150 +1,223 @@
 "use client";
 
+import { useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Map, CheckCircle2, Clock, Target, Lightbulb, TrendingUp } from "lucide-react";
+import PageGuard from "@/components/ui/PageGuard";
+import {
+  Map, CheckCircle2, Clock, Target, Lightbulb, TrendingUp,
+  Edit2, X, Save, Loader2,
+} from "lucide-react";
 import type { StrategyPhase } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-
-// Blumark24 strategic roadmap — company planning data
-const STRATEGY_PHASES: StrategyPhase[] = [
-  {
-    id: 1,
-    title: "المرحلة الأولى: الانطلاق",
-    description: "10 عملاء وتطوير المشروع الأساسي",
-    progress: 100,
-    budget: 50000,
-    startDate: "2023-01-01",
-    endDate: "2023-06-30",
-    targetClients: 10,
-    currentClients: 10,
-    goals: ["بناء فريق العمل الأساسي", "اكتساب أول 10 عملاء", "تطوير النظام الأساسي", "إنشاء هوية العلامة التجارية"],
-    status: "مكتملة",
-  },
-  {
-    id: 2,
-    title: "المرحلة الثانية: النمو",
-    description: "25 عميل + توظيف + تطوير النظام",
-    progress: 72,
-    budget: 150000,
-    startDate: "2023-07-01",
-    endDate: "2024-06-30",
-    targetClients: 25,
-    currentClients: 18,
-    goals: ["الوصول لـ25 عميل", "توظيف 5 موظفين جدد", "تطوير نظام Blumark24 OS", "تطوير خدمات الذكاء الاصطناعي"],
-    status: "جارية",
-  },
-  {
-    id: 3,
-    title: "المرحلة الثالثة: التوسع",
-    description: "مكتب مكة + المطاعم والمقاهي والبقالات",
-    progress: 20,
-    budget: 300000,
-    startDate: "2024-07-01",
-    endDate: "2025-03-31",
-    targetClients: 60,
-    currentClients: 12,
-    goals: ["افتتاح مكتب في مكة", "استهداف قطاع المطاعم والمقاهي", "تطوير حلول للبقالات", "شراكات استراتيجية"],
-    status: "قادمة",
-  },
-  {
-    id: 4,
-    title: "المرحلة الرابعة: التميز",
-    description: "تنفيذ البراند والتجهيزات الاحترافية",
-    progress: 0,
-    budget: 500000,
-    startDate: "2025-04-01",
-    endDate: "2025-12-31",
-    targetClients: 120,
-    currentClients: 0,
-    goals: ["إطلاق تجهيزات احترافية", "تطوير منصة SaaS", "برنامج الشراكة مع الشركاء", "الاعتراف الوطني بالعلامة"],
-    status: "قادمة",
-  },
-  {
-    id: 5,
-    title: "المرحلة الخامسة: الريادة",
-    description: "B2G + منصة فرص + المنافسات الحكومية",
-    progress: 0,
-    budget: 1000000,
-    startDate: "2026-01-01",
-    endDate: "2026-12-31",
-    targetClients: 250,
-    currentClients: 0,
-    goals: ["الدخول في العقود الحكومية (B2G)", "إطلاق منصة الفرص الرقمية", "المشاركة في المنافسات الحكومية", "الانتشار الوطني الكامل"],
-    status: "قادمة",
-  },
-];
+import { useStrategyPhases } from "@/hooks/useData";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { useToast } from "@/contexts/ToastContext";
 
 const STATUS_CONFIG = {
   "مكتملة": { class: "status-completed", color: "#10b981", icon: CheckCircle2 },
-  "جارية": { class: "status-pending", color: "#f59e0b", icon: Clock },
-  "قادمة": { class: "status-inactive", color: "#8ba3c7", icon: Target },
-};
+  "جارية":  { class: "status-pending",   color: "#f59e0b", icon: Clock },
+  "قادمة":  { class: "status-inactive",  color: "#8ba3c7", icon: Target },
+} as const;
 
-const AI_RECOMMENDATIONS = [
-  { icon: "🚀", title: "تسريع النمو", desc: "بناءً على البيانات الحالية، يمكن الوصول لـ25 عميل بتركيز 60% على قطاع المطاعم." },
-  { icon: "💡", title: "فرصة مقترحة", desc: "قطاع المقاهي في جدة يشهد نمواً 40%، يُنصح بالدخول خلال الربع القادم." },
-  { icon: "⚡", title: "تحسين الكفاءة", desc: "أتمتة متابعة العملاء المحتملين ستوفر 8 ساعات أسبوعياً للفريق." },
-  { icon: "📈", title: "توقع الإيرادات", desc: "مع الاستمرار بالوتيرة الحالية، يُتوقع إيراد 3.2M SAR نهاية العام." },
-];
+// AI recommendations computed from phase data
+function buildRecommendations(phases: StrategyPhase[]) {
+  const active = phases.find((p) => p.status === "جارية");
+  const totalBudget = phases.reduce((s, p) => s + p.budget, 0);
+  const overall = phases.length > 0
+    ? Math.round(phases.reduce((s, p) => s + p.progress, 0) / phases.length)
+    : 0;
+  return [
+    {
+      icon: "🚀", title: "تسريع النمو",
+      desc: active
+        ? `المرحلة الجارية "${active.title}" بلغت ${active.progress}% — استهدف إتمامها قبل ${active.endDate}.`
+        : "لا توجد مرحلة جارية حالياً. حدّد المرحلة التالية وابدأ تتبعها.",
+    },
+    {
+      icon: "💡", title: "فرصة مقترحة",
+      desc: active
+        ? `الوصول لـ${active.targetClients} عميل في هذه المرحلة — لديك ${active.currentClients} حالياً.`
+        : "راجع أهداف العملاء لكل مرحلة وحدّث البيانات الفعلية.",
+    },
+    {
+      icon: "⚡", title: "الميزانية الإجمالية",
+      desc: `إجمالي ميزانية الخطة الاستراتيجية: ${formatCurrency(totalBudget)} SAR عبر ${phases.length} مراحل.`,
+    },
+    {
+      icon: "📈", title: "التقدم الإجمالي",
+      desc: `نسبة الإنجاز الكلية: ${overall}%. ${overall >= 50 ? "الشركة على المسار الصحيح." : "تسريع التنفيذ مطلوب."}`,
+    },
+  ];
+}
 
-export default function StrategyPage() {
-  const overallProgress = Math.round(
-    STRATEGY_PHASES.reduce((s, p) => s + p.progress, 0) / STRATEGY_PHASES.length
-  );
+interface EditState {
+  progress: number;
+  currentClients: number;
+  status: StrategyPhase["status"];
+}
+
+function EditModal({
+  phase,
+  onSave,
+  onClose,
+}: {
+  phase: StrategyPhase;
+  onSave: (changes: Partial<StrategyPhase>) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [form, setForm] = useState<EditState>({
+    progress: phase.progress,
+    currentClients: phase.currentClients,
+    status: phase.status,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave(form);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative glass-card p-6 w-full max-w-md z-10">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-white font-heading font-bold">تحديث المرحلة</h3>
+          <button onClick={onClose} className="text-[#8ba3c7] hover:text-white"><X size={18} /></button>
+        </div>
+        <p className="text-[#8ba3c7] text-sm mb-5">{phase.title}</p>
+
+        <div className="space-y-4">
           <div>
-            <h1 className="text-2xl font-heading font-bold text-white flex items-center gap-2">
-              <Map size={24} className="text-[#22d3ee]" />
-              الخطة الاستراتيجية
-            </h1>
-            <p className="text-[#8ba3c7] text-sm mt-1">خارطة الطريق الاستراتيجية لـ Blumark24</p>
+            <label className="text-xs text-[#8ba3c7] mb-1 block">التقدم ({form.progress}%)</label>
+            <input
+              type="range" min={0} max={100} value={form.progress}
+              onChange={(e) => setForm((f) => ({ ...f, progress: +e.target.value }))}
+              className="w-full accent-[#22d3ee]"
+            />
           </div>
-          <div className="glass-card px-4 py-2">
-            <div className="text-xs text-[#8ba3c7] mb-1">التقدم الإجمالي</div>
-            <div className="flex items-center gap-2">
-              <div className="progress-bar w-32">
-                <div className="progress-fill" style={{ width: `${overallProgress}%` }} />
-              </div>
-              <span className="text-[#22d3ee] font-bold text-sm">{overallProgress}%</span>
+          <div>
+            <label className="text-xs text-[#8ba3c7] mb-1 block">العملاء الحاليين</label>
+            <input
+              type="number" min={0} value={form.currentClients}
+              onChange={(e) => setForm((f) => ({ ...f, currentClients: +e.target.value }))}
+              className="input-dark w-full text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-[#8ba3c7] mb-1 block">الحالة</label>
+            <select
+              value={form.status}
+              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as StrategyPhase["status"] }))}
+              className="input-dark w-full text-sm"
+            >
+              <option value="قادمة">قادمة</option>
+              <option value="جارية">جارية</option>
+              <option value="مكتملة">مكتملة</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 flex items-center justify-center gap-2">
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            حفظ
+          </button>
+          <button onClick={onClose} className="btn-secondary flex-1">إلغاء</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StrategyContent() {
+  const { data: phases, loading, error, update } = useStrategyPhases();
+  const { userRole } = usePermissions();
+  const toast = useToast();
+  const [editingPhase, setEditingPhase] = useState<StrategyPhase | null>(null);
+
+  const canEdit = userRole === "super_admin" || userRole === "board_member";
+
+  const overallProgress = phases.length > 0
+    ? Math.round(phases.reduce((s, p) => s + p.progress, 0) / phases.length)
+    : 0;
+
+  const recommendations = buildRecommendations(phases);
+
+  const handleSave = async (changes: Partial<StrategyPhase>) => {
+    if (!editingPhase) return;
+    try {
+      await update(editingPhase.id, changes);
+      toast.success("تم تحديث المرحلة بنجاح");
+    } catch {
+      toast.error("فشل تحديث المرحلة");
+      throw new Error("save failed");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-white flex items-center gap-2">
+            <Map size={24} className="text-[#22d3ee]" />
+            الخطة الاستراتيجية
+          </h1>
+          <p className="text-[#8ba3c7] text-sm mt-1">خارطة الطريق الاستراتيجية لـ Blumark24</p>
+        </div>
+        <div className="glass-card px-4 py-2">
+          <div className="text-xs text-[#8ba3c7] mb-1">التقدم الإجمالي</div>
+          <div className="flex items-center gap-2">
+            <div className="progress-bar w-32">
+              <div className="progress-fill" style={{ width: `${overallProgress}%` }} />
             </div>
+            <span className="text-[#22d3ee] font-bold text-sm">{overallProgress}%</span>
           </div>
         </div>
+      </div>
 
-        {/* AI Recommendations */}
-        <div className="glass-card p-5 border border-[#22d3ee]/20">
-          <div className="flex items-center gap-2 mb-4">
-            <Lightbulb size={18} className="text-[#22d3ee]" />
-            <h3 className="text-white font-medium">توصيات الذكاء الاصطناعي</h3>
-            <span className="badge bg-[#22d3ee]/20 text-[#22d3ee] text-xs mr-auto">محدّث الآن</span>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {AI_RECOMMENDATIONS.map((rec) => (
-              <div key={rec.title} className="p-3 rounded-xl bg-[#0d1f3c]/60 border border-[#1e3a5f] hover:border-[#22d3ee]/30 transition-all">
-                <div className="text-2xl mb-2">{rec.icon}</div>
-                <div className="text-sm font-medium text-white mb-1">{rec.title}</div>
-                <div className="text-xs text-[#8ba3c7] leading-relaxed">{rec.desc}</div>
-              </div>
-            ))}
-          </div>
+      {error && (
+        <div className="glass-card p-4 border border-red-500/30 text-red-400 text-sm">{error}</div>
+      )}
+
+      {/* AI Recommendations */}
+      <div className="glass-card p-5 border border-[#22d3ee]/20">
+        <div className="flex items-center gap-2 mb-4">
+          <Lightbulb size={18} className="text-[#22d3ee]" />
+          <h3 className="text-white font-medium">توصيات الذكاء الاصطناعي</h3>
+          <span className="badge bg-[#22d3ee]/20 text-[#22d3ee] text-xs mr-auto">محدّث تلقائياً</span>
         </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {recommendations.map((rec) => (
+            <div key={rec.title} className="p-3 rounded-xl bg-[#0d1f3c]/60 border border-[#1e3a5f] hover:border-[#22d3ee]/30 transition-all">
+              <div className="text-2xl mb-2">{rec.icon}</div>
+              <div className="text-sm font-medium text-white mb-1">{rec.title}</div>
+              <div className="text-xs text-[#8ba3c7] leading-relaxed">{rec.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-        {/* Timeline */}
+      {/* Timeline */}
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 size={32} className="animate-spin text-[#22d3ee]" />
+        </div>
+      ) : (
         <div className="relative">
-          {/* Connecting line */}
           <div className="absolute right-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-[#22d3ee] via-[#1e6fd9] to-[#1e3a5f]" />
-
           <div className="space-y-6">
-            {STRATEGY_PHASES.map((phase, i) => {
+            {phases.map((phase, i) => {
               const statusConf = STATUS_CONFIG[phase.status];
               const Icon = statusConf.icon;
               return (
                 <div key={phase.id} className="flex gap-6 relative">
-                  {/* Phase indicator */}
                   <div className="flex-shrink-0 w-16 flex flex-col items-center">
                     <div
                       className="w-10 h-10 rounded-full flex items-center justify-center z-10 border-2"
@@ -155,10 +228,9 @@ export default function StrategyPage() {
                     >
                       <Icon size={16} className="text-white" />
                     </div>
-                    <div className="text-xs text-[#8ba3c7] mt-1">م{phase.id}</div>
+                    <div className="text-xs text-[#8ba3c7] mt-1">م{i + 1}</div>
                   </div>
 
-                  {/* Phase Card */}
                   <div className={cn("flex-1 glass-card glass-card-hover p-5", phase.status === "جارية" && "border-[#f59e0b]/30")}>
                     <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
                       <div>
@@ -170,10 +242,18 @@ export default function StrategyPage() {
                         <span className="text-xs text-[#8ba3c7] bg-[#1a3356]/50 px-2 py-1 rounded-lg">
                           {phase.startDate} → {phase.endDate}
                         </span>
+                        {canEdit && (
+                          <button
+                            onClick={() => setEditingPhase(phase)}
+                            className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-[#22d3ee] hover:bg-[#1a3356] transition-all"
+                            title="تعديل"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    {/* Progress + Stats */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                       <div>
                         <div className="text-xs text-[#8ba3c7] mb-1">التقدم</div>
@@ -198,11 +278,10 @@ export default function StrategyPage() {
                       </div>
                       <div>
                         <div className="text-xs text-[#8ba3c7] mb-1">المرحلة</div>
-                        <div className="text-white font-bold text-sm">{i + 1} / {STRATEGY_PHASES.length}</div>
+                        <div className="text-white font-bold text-sm">{i + 1} / {phases.length}</div>
                       </div>
                     </div>
 
-                    {/* Goals */}
                     <div>
                       <div className="text-xs text-[#8ba3c7] mb-2">الأهداف الرئيسية:</div>
                       <div className="grid grid-cols-2 gap-1.5">
@@ -220,7 +299,25 @@ export default function StrategyPage() {
             })}
           </div>
         </div>
-      </div>
+      )}
+
+      {editingPhase && (
+        <EditModal
+          phase={editingPhase}
+          onSave={handleSave}
+          onClose={() => setEditingPhase(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+export default function StrategyPage() {
+  return (
+    <DashboardLayout>
+      <PageGuard permission="manage_reports">
+        <StrategyContent />
+      </PageGuard>
     </DashboardLayout>
   );
 }

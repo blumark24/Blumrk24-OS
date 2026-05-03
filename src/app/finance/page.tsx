@@ -22,6 +22,7 @@ function FinanceContent() {
   const toast = useToast();
   const isAdmin = userRole === "super_admin";
   const [showModal, setShowModal] = useState(false);
+  const [saving,    setSaving]   = useState(false);
   const [form, setForm] = useState({
     type: "دخل" as "دخل" | "مصروف",
     amount: "",
@@ -63,32 +64,28 @@ function FinanceContent() {
   const donutData = fundBalances.map((f) => ({ name: f.label, value: Math.round(f.pct * 100) }));
 
   const handleAddTransaction = async () => {
-    if (!form.amount || !form.description) return;
+    if (!form.amount || !form.description.trim()) {
+      toast.error("المبلغ والوصف مطلوبان");
+      return;
+    }
     const amount = Number(form.amount);
+    if (amount <= 0) { toast.error("يجب أن يكون المبلغ أكبر من صفر"); return; }
+
     const funds: Transaction["funds"] = form.type === "دخل"
-      ? {
-          operations: amount * 0.4,
-          savings:    amount * 0.1,
-          taxes:      amount * 0.1,
-          salaries:   amount * 0.2,
-          marketing:  amount * 0.2,
-        }
+      ? { operations: amount * 0.4, savings: amount * 0.1, taxes: amount * 0.1, salaries: amount * 0.2, marketing: amount * 0.2 }
       : undefined;
 
+    setSaving(true);
     try {
-      await insert({
-        type:        form.type,
-        amount,
-        description: form.description,
-        category:    form.category,
-        date:        form.date,
-        funds,
-      });
+      await insert({ type: form.type, amount, description: form.description, category: form.category, date: form.date, funds });
       toast.success("تمت إضافة المعاملة بنجاح");
       setShowModal(false);
       setForm({ type: "دخل", amount: "", description: "", category: "", date: new Date().toISOString().split("T")[0] });
-    } catch {
+    } catch (err) {
       toast.error("حدث خطأ أثناء إضافة المعاملة");
+      console.error("[Finance Save Error]", err);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -295,8 +292,11 @@ function FinanceContent() {
               )}
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={handleAddTransaction} className="btn-primary flex-1">إضافة</button>
-              <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">إلغاء</button>
+              <button onClick={handleAddTransaction} disabled={saving} className="btn-primary flex-1 disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving && <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                {saving ? "جارٍ الحفظ..." : "إضافة"}
+              </button>
+              <button onClick={() => setShowModal(false)} disabled={saving} className="btn-secondary flex-1">إلغاء</button>
             </div>
           </div>
         </div>
