@@ -8,7 +8,7 @@ import { usePermissions, ROLE_LABELS, UserRole } from "@/contexts/PermissionsCon
 import { useEmployees } from "@/hooks/useData";
 import { useToast } from "@/contexts/ToastContext";
 import PageGuard from "@/components/ui/PageGuard";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase"; // needed for getSession()
 
 const statusBadge = (status: string) =>
   status === "نشط" ? "status-active" : "status-inactive";
@@ -126,50 +126,43 @@ function EmployeesContent() {
         });
         toast.success("تم تحديث بيانات الموظف بنجاح");
       } else {
-        // Try real Auth user creation first
-        let authUserId: string | null = null;
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (!token) throw new Error("لم يتم العثور على جلسة المستخدم — يرجى تسجيل الدخول مجدداً");
+
+        const controller = new AbortController();
+        const timeoutId  = setTimeout(() => controller.abort(), 10000);
+        let res: Response;
         try {
-          const { data: sessionData } = await supabase.auth.getSession();
-          const token = sessionData.session?.access_token;
-          const res = await fetch("/api/admin/create-user", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+          res = await fetch("/api/admin/create-user", {
+            method:  "POST",
+            signal:  controller.signal,
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({
               email:      form.email,
               password:   form.password,
               name:       form.name,
               role:       form.role,
               department: form.department,
+              phone:      form.phone || null,
+              salary:     form.salary ? Number(form.salary) : null,
+              status:     form.status,
             }),
           });
-          const json = await res.json();
-          if (res.ok && json.id) {
-            authUserId = json.id;
-          } else {
-            console.warn("[Employee Auth Create]", json.error ?? "API error — falling back to direct insert");
-          }
-        } catch (apiErr) {
-          console.warn("[Employee Auth Create] API unreachable:", apiErr);
+        } catch (fetchErr) {
+          clearTimeout(timeoutId);
+          const isAbort = fetchErr instanceof DOMException && fetchErr.name === "AbortError";
+          throw new Error(isAbort ? "انتهت مهلة الطلب (10 ثوانٍ) — تحقق من اتصال الإنترنت" : "تعذر الوصول إلى الخادم");
+        }
+        clearTimeout(timeoutId);
+
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json.error ?? `خطأ من الخادم (${res.status})`);
         }
 
-        // Insert into employees table (with or without linked auth id)
-        const { error: insertErr } = await supabase.from("employees").insert([{
-          id:              authUserId ?? undefined,
-          name:            form.name,
-          email:           form.email,
-          phone:           form.phone || null,
-          department:      form.department,
-          role:            form.role,
-          status:          form.status,
-          join_date:       new Date().toISOString().split("T")[0],
-          performance:     3,
-          tasks:           0,
-          completed_tasks: 0,
-          salary:          form.salary ? Number(form.salary) : null,
-        }]);
-        if (insertErr) throw new Error(insertErr.message);
         await refetch();
-        toast.success(authUserId ? `تمت إضافة ${form.name} وإنشاء حساب الدخول بنجاح` : `تمت إضافة ${form.name} بنجاح`);
+        toast.success(`تمت إضافة ${form.name} وإنشاء حساب الدخول بنجاح`);
       }
       closeModal();
     } catch (err) {
@@ -187,7 +180,7 @@ function EmployeesContent() {
       await remove(emp.id);
       toast.success("تم حذف الموظف بنجاح");
     } catch (err) {
-      toast.error("حدث خطأ أثناء الحذف");
+      toast.error(err instanceof Error ? err.message : "حدث خطأ أثناء الحذف");
       console.error("[Employee Delete Error]", err);
     }
   };
@@ -315,10 +308,10 @@ function EmployeesContent() {
                     <td className="px-4 py-3">
                       {isAdmin && (
                         <div className="flex items-center gap-2">
-                          <button onClick={() => openEdit(emp)} className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-[#22d3ee] hover:bg-[#1a3356] transition-all" title="تعديل">
+                          <button onClick={() => openEdit(emp)} aria-label="تعديل الموظف" className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-[#22d3ee] hover:bg-[#1a3356] transition-all">
                             <Edit2 size={14} />
                           </button>
-                          <button onClick={() => handleDelete(emp)} className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-red-400 hover:bg-red-500/10 transition-all" title="حذف">
+                          <button onClick={() => handleDelete(emp)} aria-label="حذف الموظف" className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-red-400 hover:bg-red-500/10 transition-all">
                             <Trash2 size={14} />
                           </button>
                         </div>

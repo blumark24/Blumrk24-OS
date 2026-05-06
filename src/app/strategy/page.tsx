@@ -155,9 +155,9 @@ function StrategyContent() {
     try {
       await update(editingPhase.id, changes);
       toast.success("تم تحديث المرحلة بنجاح");
-    } catch {
-      toast.error("فشل تحديث المرحلة");
-      throw new Error("save failed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "فشل تحديث المرحلة");
+      throw err;
     }
   };
 
@@ -245,8 +245,8 @@ function StrategyContent() {
                         {canEdit && (
                           <button
                             onClick={() => setEditingPhase(phase)}
+                            aria-label="تعديل المرحلة"
                             className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-[#22d3ee] hover:bg-[#1a3356] transition-all"
-                            title="تعديل"
                           >
                             <Edit2 size={14} />
                           </button>
