@@ -1,21 +1,24 @@
 import { supabase } from "./supabase";
 
-// ─── Secure admin helpers (call Next.js API routes — Service Role key stays server-side) ──
+// ─── Secure admin helpers (Supabase Edge Function — Service Role key stays in Supabase infra) ──
+// Uses supabase.functions.invoke() so the JWT is sent automatically and the
+// Edge Function URL is always correct regardless of deployment environment.
 
-async function adminFetch(path: string, method: string, body: unknown) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error("لم يتم تسجيل الدخول");
-  const res = await fetch(path, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify(body),
+async function adminInvoke(action: string, payload: Record<string, unknown>) {
+  const { data, error } = await supabase.functions.invoke("admin-users", {
+    body: { action, ...payload },
   });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error ?? "فشل الطلب");
-  return json;
+  if (error) {
+    // error.message may contain a JSON string from the function body
+    let msg = error.message ?? "فشل الطلب";
+    try {
+      const parsed = JSON.parse(msg);
+      if (parsed?.error) msg = parsed.error;
+    } catch { /* not JSON */ }
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
 }
 
 export async function createAuthUser(data: {
@@ -24,12 +27,15 @@ export async function createAuthUser(data: {
   name: string;
   role: string;
   department: string;
+  phone?: string | null;
+  salary?: number | null;
+  status?: string;
 }): Promise<{ id: string }> {
-  return adminFetch("/api/admin/create-user", "POST", data);
+  return adminInvoke("create", data as Record<string, unknown>);
 }
 
 export async function deleteAuthUser(userId: string): Promise<void> {
-  await adminFetch("/api/admin/delete-user", "DELETE", { userId });
+  await adminInvoke("delete", { userId });
 }
 
 export async function updateAuthUser(userId: string, data: {
@@ -38,7 +44,7 @@ export async function updateAuthUser(userId: string, data: {
   isActive?: boolean;
   name?: string;
 }): Promise<void> {
-  await adminFetch("/api/admin/update-user", "PATCH", { userId, ...data });
+  await adminInvoke("update", { userId, ...data });
 }
 
 // ─── Board Members ─────────────────────────────────────────────────────────────
