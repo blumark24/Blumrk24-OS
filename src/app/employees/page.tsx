@@ -180,7 +180,7 @@ function EmployeesContent() {
       await remove(emp.id);
       toast.success("تم حذف الموظف بنجاح");
     } catch (err) {
-      toast.error("حدث خطأ أثناء الحذف");
+      toast.error(err instanceof Error ? err.message : "حدث خطأ أثناء الحذف");
       console.error("[Employee Delete Error]", err);
     }
   };
@@ -308,10 +308,10 @@ function EmployeesContent() {
                     <td className="px-4 py-3">
                       {isAdmin && (
                         <div className="flex items-center gap-2">
-                          <button onClick={() => openEdit(emp)} className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-[#22d3ee] hover:bg-[#1a3356] transition-all" title="تعديل">
+                          <button onClick={() => openEdit(emp)} aria-label="تعديل الموظف" className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-[#22d3ee] hover:bg-[#1a3356] transition-all">
                             <Edit2 size={14} />
                           </button>
-                          <button onClick={() => handleDelete(emp)} className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-red-400 hover:bg-red-500/10 transition-all" title="حذف">
+                          <button onClick={() => handleDelete(emp)} aria-label="حذف الموظف" className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-red-400 hover:bg-red-500/10 transition-all">
                             <Trash2 size={14} />
                           </button>
                         </div>

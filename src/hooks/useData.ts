@@ -535,11 +535,23 @@ function strategyPhaseUpdateToDB(changes: Partial<StrategyPhase>): Record<string
 }
 
 async function fetchStrategyPhases(): Promise<StrategyPhase[]> {
+  // Try ordering by sort_order; fall back to id if column doesn't exist yet
   const { data, error } = await supabase
     .from("strategy_phases")
     .select("*")
     .order("sort_order", { ascending: true });
-  if (error) throw new Error(error.message);
+
+  if (error) {
+    if (error.message.includes("sort_order")) {
+      const { data: fallback, error: fallbackError } = await supabase
+        .from("strategy_phases")
+        .select("*")
+        .order("id", { ascending: true });
+      if (fallbackError) throw new Error(fallbackError.message);
+      return ((fallback ?? []) as Record<string, unknown>[]).map(strategyPhaseFromDB);
+    }
+    throw new Error(error.message);
+  }
   return ((data ?? []) as Record<string, unknown>[]).map(strategyPhaseFromDB);
 }
 

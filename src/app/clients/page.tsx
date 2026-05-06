@@ -103,7 +103,7 @@ function ClientsContent() {
       }
       setShowModal(false);
     } catch (err) {
-      toast.error("حدث خطأ أثناء حفظ العميل");
+      toast.error(err instanceof Error ? err.message : "حدث خطأ أثناء حفظ العميل");
       console.error("[Client Save Error]", err);
     } finally {
       setSaving(false);
@@ -116,7 +116,7 @@ function ClientsContent() {
       await remove(id);
       toast.success("تم حذف العميل بنجاح");
     } catch (err) {
-      toast.error("حدث خطأ أثناء حذف العميل");
+      toast.error(err instanceof Error ? err.message : "حدث خطأ أثناء حذف العميل");
       console.error("[Client Delete Error]", err);
     }
   };
@@ -259,10 +259,10 @@ function ClientsContent() {
                     <td className="px-4 py-3">
                       {isAdmin && (
                         <div className="flex items-center gap-2">
-                          <button onClick={() => openEdit(client)} className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-[#22d3ee] hover:bg-[#1a3356] transition-all">
+                          <button onClick={() => openEdit(client)} aria-label="تعديل العميل" className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-[#22d3ee] hover:bg-[#1a3356] transition-all">
                             <Edit2 size={14} />
                           </button>
-                          <button onClick={() => handleDelete(client.id)} className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-red-400 hover:bg-red-500/10 transition-all">
+                          <button onClick={() => handleDelete(client.id)} aria-label="حذف العميل" className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-red-400 hover:bg-red-500/10 transition-all">
                             <Trash2 size={14} />
                           </button>
                         </div>
