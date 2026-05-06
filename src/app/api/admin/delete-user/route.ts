@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { validateUserId } from "@/lib/apiValidation";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? "";
 const ANON_KEY     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -9,9 +10,7 @@ const ADMIN_EMAILS = ["blumark24@gmail.com", "blumark.sa@gmail.com"];
 
 function serviceClient() {
   if (!SUPABASE_URL || !SERVICE_KEY) {
-    throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY غير مضبوط — أضفه في Vercel → Project Settings → Environment Variables"
-    );
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY غير مضبوط — أضفه في Vercel → Project Settings → Environment Variables");
   }
   return createClient(SUPABASE_URL, SERVICE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -39,22 +38,20 @@ export async function DELETE(req: NextRequest) {
   }
 
   const authError = await verifyAdmin(auth.slice(7));
-  if (authError) {
-    return NextResponse.json({ error: authError }, { status: 403 });
-  }
+  if (authError) return NextResponse.json({ error: authError }, { status: 403 });
 
-  let userId: string | undefined;
-  try {
-    ({ userId } = await req.json());
-  } catch {
-    return NextResponse.json({ error: "طلب غير صالح" }, { status: 400 });
-  }
-  if (!userId) return NextResponse.json({ error: "userId مطلوب" }, { status: 400 });
+  let body: Record<string, unknown>;
+  try { body = await req.json(); }
+  catch { return NextResponse.json({ error: "طلب غير صالح" }, { status: 400 }); }
+
+  const idError = validateUserId(body.userId);
+  if (idError) return NextResponse.json({ error: idError }, { status: 400 });
+
+  const userId = body.userId as string;
 
   let admin: ReturnType<typeof serviceClient>;
-  try {
-    admin = serviceClient();
-  } catch (err) {
+  try { admin = serviceClient(); }
+  catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "خطأ في إعداد الخادم" }, { status: 500 });
   }
 

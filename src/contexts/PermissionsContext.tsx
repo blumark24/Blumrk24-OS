@@ -192,18 +192,6 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   //    the current user's own role, to avoid async race conditions.
   const userRole: UserRole = mapAuthRoleToUserRole(user?.role ?? "");
 
-  // Debug: always log to console so we can verify the flow
-  useEffect(() => {
-    if (!user) return;
-    console.group("[Blumark24 Auth Debug]");
-    console.log("auth email :", user.email);
-    console.log("auth id    :", user.id);
-    console.log("raw role   :", user.role);
-    console.log("mapped role:", userRole);
-    console.log("isSuperAdmin:", userRole === "super_admin");
-    console.groupEnd();
-  }, [user, userRole]);
-
   const hasPermission = useCallback(
     (perm: Permission) => {
       if (userRole === "super_admin") return true;
