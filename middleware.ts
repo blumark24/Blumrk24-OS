@@ -1,40 +1,36 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/auth", "/_next", "/favicon.ico", "/api"];
+const PUBLIC_PREFIXES = ["/auth", "/_next/", "/favicon.ico", "/api/"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Always allow public paths
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  // Always allow public paths and API routes (APIs verify JWT themselves)
+  if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  // Skip auth enforcement when Supabase is not configured (dev/demo mode)
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.next();
-  }
-
-  // Check for Supabase session cookie (set by supabase-js v2 when using cookie storage)
-  // Pattern: sb-<project-ref>-auth-token
+  // Check Supabase native session cookie (sb-<project-ref>-auth-token)
   const cookies = request.cookies.getAll();
-  const hasAuthCookie = cookies.some(
+  const hasSupabaseCookie = cookies.some(
     (c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token")
   );
 
-  // Also check our lightweight session marker set by AuthContext on login
-  const hasSessionMarker = request.cookies.has("blumark_session");
+  // Check our lightweight session signal set by AuthContext
+  const hasSessionMarker = request.cookies.get("blumark_session")?.value === "1";
 
-  if (!hasAuthCookie && !hasSessionMarker && !pathname.startsWith("/auth")) {
-    return NextResponse.redirect(new URL("/auth", request.url));
+  if (!hasSupabaseCookie && !hasSessionMarker) {
+    const loginUrl = new URL("/auth", request.url);
+    loginUrl.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon\\.ico).*)",
+  ],
 };

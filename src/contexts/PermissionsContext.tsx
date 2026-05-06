@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useAuth } from "./AuthContext";
 import { getAllProfiles, updateProfileRole, toggleProfileStatus } from "@/lib/db";
+import { supabase } from "@/lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -186,6 +187,26 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     }).catch(console.error);
   }, [user?.id]);
 
+  // Load persisted role permissions from DB
+  useEffect(() => {
+    if (!user?.id) return;
+    Promise.resolve(
+      supabase.from("role_permissions").select("role, permissions")
+    ).then(({ data }) => {
+      if (!data?.length) return;
+      const loaded: Partial<Record<UserRole, Permission[]>> = {};
+      data.forEach((row: { role: string; permissions: string[] }) => {
+        const r = row.role as UserRole;
+        if (ALL_ROLES.includes(r)) {
+          loaded[r] = (row.permissions as Permission[]).filter((p) => ALL_PERMISSIONS.includes(p));
+        }
+      });
+      if (Object.keys(loaded).length > 0) {
+        setRolePermissions((prev) => ({ ...prev, ...loaded }));
+      }
+    }).catch(() => {}); // silently fall back to defaults
+  }, [user?.id]);
+
   // ── userRole: single authoritative source is user.role from AuthContext
   //    (which reads directly from profiles table by auth user id).
   //    managedUsers is used only for the admin panel — never to determine
@@ -236,7 +257,15 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const saveAll = useCallback(() => {}, []);
+  // Persist all role permissions to DB (called by settings page Save button)
+  const saveAll = useCallback(async () => {
+    const rows = ALL_ROLES.map((role) => ({
+      role,
+      permissions: rolePermissions[role] ?? [],
+      updated_at: new Date().toISOString(),
+    }));
+    await supabase.from("role_permissions").upsert(rows, { onConflict: "role" });
+  }, [rolePermissions]);
 
   return (
     <PermissionsContext.Provider
