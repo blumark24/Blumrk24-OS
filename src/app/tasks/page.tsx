@@ -91,7 +91,7 @@ function TasksContent() {
       setShowModal(false);
       resetForm();
     } catch (err) {
-      toast.error("حدث خطأ أثناء حفظ المهمة");
+      toast.error(err instanceof Error ? err.message : "حدث خطأ أثناء حفظ المهمة");
       console.error("[Task Save Error]", err);
     } finally {
       setSaving(false);
@@ -104,7 +104,7 @@ function TasksContent() {
       await remove(taskId);
       toast.success("تم حذف المهمة بنجاح");
     } catch (err) {
-      toast.error("حدث خطأ أثناء الحذف");
+      toast.error(err instanceof Error ? err.message : "حدث خطأ أثناء الحذف");
       console.error("[Task Delete Error]", err);
     }
   };
@@ -113,7 +113,7 @@ function TasksContent() {
     try {
       await update(taskId, { status: newStatus });
     } catch (err) {
-      toast.error("حدث خطأ أثناء تحديث المهمة");
+      toast.error(err instanceof Error ? err.message : "حدث خطأ أثناء تحديث المهمة");
       console.error("[Task Move Error]", err);
     }
   };
@@ -143,12 +143,14 @@ function TasksContent() {
             <div className="flex items-center bg-[#0d1f3c] rounded-xl p-1 border border-[#1e3a5f]">
               <button
                 onClick={() => setView("kanban")}
+                aria-label="عرض كانبان"
                 className={cn("p-2 rounded-lg transition-all", view === "kanban" ? "bg-[#22d3ee] text-[#0a1628]" : "text-[#8ba3c7]")}
               >
                 <Columns size={15} />
               </button>
               <button
                 onClick={() => setView("list")}
+                aria-label="عرض قائمة"
                 className={cn("p-2 rounded-lg transition-all", view === "list" ? "bg-[#22d3ee] text-[#0a1628]" : "text-[#8ba3c7]")}
               >
                 <List size={15} />
@@ -221,10 +223,10 @@ function TasksContent() {
                           <div className="flex items-center gap-1">
                             {isAdmin && (
                               <>
-                                <button onClick={() => openEdit(task)} className="p-1 rounded text-[#8ba3c7] hover:text-[#22d3ee] transition-colors" title="تعديل">
+                                <button onClick={() => openEdit(task)} aria-label="تعديل المهمة" className="p-1 rounded text-[#8ba3c7] hover:text-[#22d3ee] transition-colors">
                                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                 </button>
-                                <button onClick={() => handleDeleteTask(task.id, task.title)} className="p-1 rounded text-[#8ba3c7] hover:text-red-400 transition-colors" title="حذف">
+                                <button onClick={() => handleDeleteTask(task.id, task.title)} aria-label="حذف المهمة" className="p-1 rounded text-[#8ba3c7] hover:text-red-400 transition-colors">
                                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
                                 </button>
                               </>
