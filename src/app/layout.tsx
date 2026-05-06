@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </PermissionsProvider>
           </AuthProvider>
         </ToastProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
