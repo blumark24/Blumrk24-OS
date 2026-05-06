@@ -175,10 +175,31 @@ function EmployeesContent() {
   };
 
   const handleDelete = async (emp: typeof employees[0]) => {
-    if (!confirm(`هل أنت متأكد من حذف ${emp.name}؟`)) return;
+    if (!confirm(`هل أنت متأكد من حذف ${emp.name}؟ سيُحذف حسابه من نظام المصادقة أيضاً.`)) return;
     try {
+      // Delete from Supabase Auth (non-blocking — auth user may not exist for legacy records)
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (token) {
+        const res = await fetch("/api/admin/delete-user", {
+          method:  "DELETE",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ userId: emp.id }),
+        });
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}));
+          // "not found" is expected for legacy employees without auth accounts — continue
+          const isNotFound = res.status === 400 && (json.error ?? "").includes("غير موجود");
+          if (!isNotFound) {
+            const isMissingKey = (json.error ?? "").includes("SERVICE_ROLE_KEY");
+            if (isMissingKey) throw new Error(json.error);
+            console.warn("[Employee Delete Auth]", json.error);
+          }
+        }
+      }
+      // Delete from employees table
       await remove(emp.id);
-      toast.success("تم حذف الموظف بنجاح");
+      toast.success(`تم حذف ${emp.name} بنجاح`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "حدث خطأ أثناء الحذف");
       console.error("[Employee Delete Error]", err);

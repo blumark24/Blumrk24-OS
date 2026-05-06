@@ -1,43 +1,67 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { validateUserId } from "@/lib/apiValidation";
 
-function adminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Supabase admin credentials not configured");
-  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? "";
+const ANON_KEY     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+
+const ADMIN_EMAILS = ["blumark24@gmail.com", "blumark.sa@gmail.com"];
+
+function serviceClient() {
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY غير مضبوط — أضفه في Vercel → Project Settings → Environment Variables");
+  }
+  return createClient(SUPABASE_URL, SERVICE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 }
 
-async function verifyAdmin(req: NextRequest): Promise<boolean> {
-  const auth = req.headers.get("authorization");
-  if (!auth?.startsWith("Bearer ")) return false;
-  const token = auth.slice(7);
-  const admin = adminClient();
-  const { data: { user }, error } = await admin.auth.getUser(token);
-  if (error || !user) return false;
-  const { data: profile } = await admin
-    .from("profiles").select("role").eq("id", user.id).single();
-  return profile?.role === "super_admin";
+async function verifyAdmin(token: string): Promise<string | null> {
+  const client = createClient(SUPABASE_URL, ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth:   { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: { user }, error } = await client.auth.getUser();
+  if (error || !user) return "جلسة المستخدم غير صالحة أو انتهت";
+  const email = user.email ?? "";
+  if (ADMIN_EMAILS.includes(email)) return null;
+  const { data: profile } = await client.from("profiles").select("role").eq("id", user.id).maybeSingle();
+  if (profile?.role === "super_admin") return null;
+  return `غير مصرح — دورك (${profile?.role ?? "غير محدد"}) لا يملك هذه الصلاحية`;
 }
 
 export async function DELETE(req: NextRequest) {
-  try {
-    if (!(await verifyAdmin(req))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const { userId } = await req.json();
-    if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
-
-    const admin = adminClient();
-    const { error } = await admin.auth.admin.deleteUser(userId);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal error" },
-      { status: 500 }
-    );
+  const auth = req.headers.get("authorization") ?? "";
+  if (!auth.startsWith("Bearer ")) {
+    return NextResponse.json({ error: "Authorization header مفقود" }, { status: 401 });
   }
+
+  const authError = await verifyAdmin(auth.slice(7));
+  if (authError) return NextResponse.json({ error: authError }, { status: 403 });
+
+  let body: Record<string, unknown>;
+  try { body = await req.json(); }
+  catch { return NextResponse.json({ error: "طلب غير صالح" }, { status: 400 }); }
+
+  const idError = validateUserId(body.userId);
+  if (idError) return NextResponse.json({ error: idError }, { status: 400 });
+
+  const userId = body.userId as string;
+
+  let admin: ReturnType<typeof serviceClient>;
+  try { admin = serviceClient(); }
+  catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "خطأ في إعداد الخادم" }, { status: 500 });
+  }
+
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error) {
+    const msg = error.message.toLowerCase().includes("not found")
+      ? "المستخدم غير موجود في نظام المصادقة"
+      : error.message;
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+
+  return NextResponse.json({ ok: true });
 }

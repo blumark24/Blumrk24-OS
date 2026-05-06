@@ -43,6 +43,42 @@ function FinanceContent() {
   const totalExpense = transactions.filter((t) => t.type === "مصروف").reduce((s, t) => s + t.amount, 0);
   const netProfit    = totalIncome - totalExpense;
 
+  // Real month-over-month change percentages
+  const momChanges = useMemo(() => {
+    const now  = new Date();
+    const thisM = now.getMonth();
+    const thisY = now.getFullYear();
+    const lastM = thisM === 0 ? 11 : thisM - 1;
+    const lastY = thisM === 0 ? thisY - 1 : thisY;
+
+    let curInc = 0, prevInc = 0, curExp = 0, prevExp = 0;
+    transactions.forEach((t) => {
+      const d = new Date(t.date);
+      if (isNaN(d.getTime())) return;
+      const m = d.getMonth();
+      const y = d.getFullYear();
+      if (y === thisY && m === thisM) {
+        if (t.type === "دخل") curInc += t.amount;
+        else curExp += t.amount;
+      } else if (y === lastY && m === lastM) {
+        if (t.type === "دخل") prevInc += t.amount;
+        else prevExp += t.amount;
+      }
+    });
+
+    const pct = (cur: number, prev: number) => {
+      if (prev === 0) return cur > 0 ? "+100%" : "—";
+      const diff = ((cur - prev) / prev) * 100;
+      return `${diff >= 0 ? "+" : ""}${diff.toFixed(0)}%`;
+    };
+
+    return {
+      income:  pct(curInc, prevInc),
+      expense: pct(curExp, prevExp),
+      profit:  pct(curInc - curExp, prevInc - prevExp),
+    };
+  }, [transactions]);
+
   const monthlyData = useMemo(() => {
     const map: Record<string, { income: number; expense: number }> = {};
     transactions.forEach((tx) => {
@@ -104,7 +140,7 @@ function FinanceContent() {
       }
       closeModal();
     } catch (err) {
-      toast.error("حدث خطأ أثناء حفظ المعاملة");
+      toast.error(err instanceof Error ? err.message : "حدث خطأ أثناء حفظ المعاملة");
       console.error("[Finance Save Error]", err);
     } finally {
       setSaving(false);
@@ -117,7 +153,7 @@ function FinanceContent() {
       await remove(tx.id);
       toast.success("تم حذف المعاملة بنجاح");
     } catch (err) {
-      toast.error("حدث خطأ أثناء الحذف");
+      toast.error(err instanceof Error ? err.message : "حدث خطأ أثناء الحذف");
       console.error("[Finance Delete Error]", err);
     }
   };
@@ -146,7 +182,7 @@ function FinanceContent() {
           <div className="glass-card p-5 relative overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <div className="p-2 rounded-xl bg-emerald-500/20"><TrendingUp size={20} className="text-emerald-400" /></div>
-              <span className="text-xs text-emerald-400 flex items-center gap-1"><ArrowUpRight size={12} />+18%</span>
+              <span className="text-xs text-emerald-400 flex items-center gap-1"><ArrowUpRight size={12} />{momChanges.income}</span>
             </div>
             <div className="text-2xl font-heading font-bold text-white">{formatCurrency(totalIncome)}</div>
             <div className="text-sm text-[#8ba3c7] mt-1">إجمالي الدخل</div>
@@ -155,7 +191,7 @@ function FinanceContent() {
           <div className="glass-card p-5 relative overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <div className="p-2 rounded-xl bg-red-500/20"><TrendingDown size={20} className="text-red-400" /></div>
-              <span className="text-xs text-red-400 flex items-center gap-1"><ArrowUpRight size={12} />+5%</span>
+              <span className="text-xs text-red-400 flex items-center gap-1"><ArrowUpRight size={12} />{momChanges.expense}</span>
             </div>
             <div className="text-2xl font-heading font-bold text-white">{formatCurrency(totalExpense)}</div>
             <div className="text-sm text-[#8ba3c7] mt-1">إجمالي المصروف</div>
@@ -164,7 +200,7 @@ function FinanceContent() {
           <div className="glass-card p-5 relative overflow-hidden">
             <div className="flex items-center justify-between mb-3">
               <div className="p-2 rounded-xl bg-cyan-500/20"><DollarSign size={20} className="text-cyan-400" /></div>
-              <span className="text-xs text-cyan-400 flex items-center gap-1"><ArrowUpRight size={12} />+24%</span>
+              <span className="text-xs text-cyan-400 flex items-center gap-1"><ArrowUpRight size={12} />{momChanges.profit}</span>
             </div>
             <div className="text-2xl font-heading font-bold" style={{ color: netProfit >= 0 ? "#10b981" : "#ef4444" }}>
               {formatCurrency(netProfit)}
@@ -264,10 +300,10 @@ function FinanceContent() {
                     <td className="px-4 py-3">
                       {isAdmin && (
                         <div className="flex items-center gap-2">
-                          <button onClick={() => openEdit(tx)} className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-[#22d3ee] hover:bg-[#1a3356] transition-all" title="تعديل">
+                          <button onClick={() => openEdit(tx)} aria-label="تعديل المعاملة" className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-[#22d3ee] hover:bg-[#1a3356] transition-all">
                             <Edit2 size={13} />
                           </button>
-                          <button onClick={() => handleDelete(tx)} className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-red-400 hover:bg-red-500/10 transition-all" title="حذف">
+                          <button onClick={() => handleDelete(tx)} aria-label="حذف المعاملة" className="p-1.5 rounded-lg text-[#8ba3c7] hover:text-red-400 hover:bg-red-500/10 transition-all">
                             <Trash2 size={13} />
                           </button>
                         </div>
