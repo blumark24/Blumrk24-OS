@@ -1,9 +1,40 @@
 import { supabase } from "./supabase";
 
 // ─── Secure admin helpers ──────────────────────────────────────────────────────
-// Calls the Supabase Edge Function admin-users using a direct fetch() with an
-// AbortController timeout.  supabase.functions.invoke() has no built-in timeout
-// and can hang silently — direct fetch guarantees the 12 s abort fires.
+// Tries the Supabase Edge Function first (12 s hard timeout).
+// If the Edge Function returns 501 or a placeholder body, automatically falls
+// back to the Next.js /api/admin/* routes deployed on Vercel — so employee
+// creation works even when the Edge Function hasn't been deployed yet.
+
+const ACTION_ROUTE: Record<string, { path: string; method: string }> = {
+  create: { path: "/api/admin/create-user", method: "POST"   },
+  delete: { path: "/api/admin/delete-user", method: "DELETE" },
+  update: { path: "/api/admin/update-user", method: "PATCH"  },
+};
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`الطلب استغرق أكثر من ${timeoutMs / 1000} ثانية — يرجى المحاولة لاحقاً`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
+function isPlaceholder(data: Record<string, unknown>): boolean {
+  const msg = String(data?.message ?? data?.error ?? "").toLowerCase();
+  return msg.includes("placeholder") || msg.includes("claude code must deploy");
+}
 
 async function adminInvoke(action: string, payload: Record<string, unknown>) {
   // 1. Obtain the current JWT (fast — reads from in-memory cache)
@@ -18,57 +49,75 @@ async function adminInvoke(action: string, payload: Record<string, unknown>) {
     throw new Error("NEXT_PUBLIC_SUPABASE_URL غير مضبوط في بيئة Next.js");
   }
 
-  // 2. Hard 12-second abort at the network level — guaranteed to fire
-  const controller = new AbortController();
-  const timeoutId  = setTimeout(() => controller.abort(), 12_000);
+  const headers = {
+    "Content-Type":  "application/json",
+    "Authorization": `Bearer ${token}`,
+  };
+  const body = JSON.stringify({ action, ...payload });
 
-  let res: Response;
+  // 2. Try Edge Function with 12-second hard timeout
+  let useApiRoute = false;
   try {
-    res = await fetch(`${supabaseUrl}/functions/v1/admin-users`, {
-      method:  "POST",
-      signal:  controller.signal,
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${token}`,
-      },
-      body: JSON.stringify({ action, ...payload }),
-    });
-  } catch (fetchErr) {
-    clearTimeout(timeoutId);
-    if (fetchErr instanceof DOMException && fetchErr.name === "AbortError") {
-      throw new Error(
-        "دالة admin-users لم ترد خلال 12 ثانية — تحقق من حالة Edge Functions في لوحة Supabase"
-      );
+    const res = await fetchWithTimeout(
+      `${supabaseUrl}/functions/v1/admin-users`,
+      { method: "POST", headers, body },
+      12_000,
+    );
+
+    let data: Record<string, unknown> = {};
+    try { data = await res.json(); } catch { /* ignore parse failure */ }
+
+    // Fall back if Edge Function is a placeholder (501 or placeholder body)
+    if (res.status === 501 || isPlaceholder(data)) {
+      useApiRoute = true;
+    } else if (!res.ok) {
+      const errMsg = (data?.error as string) ?? `خطأ HTTP ${res.status}`;
+      if (errMsg.includes("SERVICE_ROLE_KEY") || errMsg.includes("غير مضبوط")) {
+        throw new Error("مفتاح الخدمة غير مضبوط في Supabase Edge Function");
+      }
+      throw new Error(`تعذر حفظ الموظف: ${errMsg}`);
+    } else if (data?.error) {
+      throw new Error(`تعذر حفظ الموظف: ${data.error as string}`);
+    } else {
+      return data;
     }
-    const detail = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-    throw new Error(`تعذر الاتصال بخادم Supabase: ${detail}`);
-  }
-  clearTimeout(timeoutId);
-
-  // 3. Parse JSON body
-  let data: Record<string, unknown>;
-  try {
-    data = await res.json();
-  } catch {
-    throw new Error(`استجابة غير صالحة من Edge Function (HTTP ${res.status})`);
-  }
-
-  // 4. Surface HTTP errors with the Arabic message from the function body
-  if (!res.ok) {
-    const errMsg = (data?.error as string) ?? `خطأ HTTP ${res.status}`;
-    // Detect missing service-role key inside the function
-    if (errMsg.includes("SERVICE_ROLE_KEY") || errMsg.includes("غير مضبوط")) {
-      throw new Error("مفتاح الخدمة غير مضبوط في Supabase Edge Function");
+  } catch (err) {
+    // Network errors or timeout from Edge Function → try Next.js route
+    if (err instanceof Error && (
+      err.message.includes("placeholder") ||
+      err.message.includes("استغرق") ||
+      err.message.includes("تعذر الاتصال")
+    )) {
+      useApiRoute = true;
+    } else {
+      throw err;
     }
-    throw new Error(`تعذر حفظ الموظف: ${errMsg}`);
   }
 
-  // 5. Function may return { error: "..." } with status 200 for business errors
-  if (data?.error) {
-    throw new Error(`تعذر حفظ الموظف: ${data.error as string}`);
+  // 3. Fallback: Next.js API route (deployed on Vercel, uses service role key)
+  if (useApiRoute) {
+    const route = ACTION_ROUTE[action];
+    if (!route) throw new Error(`action غير معروف: ${action}`);
+
+    const apiRes = await fetchWithTimeout(
+      route.path,
+      { method: route.method, headers, body: JSON.stringify(payload) },
+      15_000,
+    );
+
+    let apiData: Record<string, unknown> = {};
+    try { apiData = await apiRes.json(); } catch {
+      throw new Error(`استجابة غير صالحة من API (HTTP ${apiRes.status})`);
+    }
+
+    if (!apiRes.ok) {
+      throw new Error((apiData?.error as string) ?? `خطأ HTTP ${apiRes.status}`);
+    }
+    if (apiData?.error) throw new Error(apiData.error as string);
+    return apiData;
   }
 
-  return data;
+  throw new Error("تعذر تنفيذ العملية — يرجى المحاولة مجدداً");
 }
 
 export async function createAuthUser(data: {
