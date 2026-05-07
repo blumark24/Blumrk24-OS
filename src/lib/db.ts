@@ -1,10 +1,12 @@
 import { supabase } from "./supabase";
 
 // ─── Secure admin helpers ──────────────────────────────────────────────────────
-// Tries the Supabase Edge Function first (12 s hard timeout).
-// If the Edge Function returns 501 or a placeholder body, automatically falls
-// back to the Next.js /api/admin/* routes deployed on Vercel — so employee
-// creation works even when the Edge Function hasn't been deployed yet.
+// Primary path: Next.js /api/admin/* routes (server-side, use SUPABASE_SERVICE_ROLE_KEY).
+// Secondary attempt: Supabase Edge Function (if fully deployed and not a placeholder).
+//
+// Design principle: any failure from the Edge Function silently falls back to
+// the API routes. Only explicit business-logic errors (403, 400, etc.) from a
+// fully-deployed Edge Function are surfaced as user-visible errors.
 
 const ACTION_ROUTE: Record<string, { path: string; method: string }> = {
   create: { path: "/api/admin/create-user", method: "POST"   },
@@ -12,32 +14,96 @@ const ACTION_ROUTE: Record<string, { path: string; method: string }> = {
   update: { path: "/api/admin/update-user", method: "PATCH"  },
 };
 
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error(`الطلب استغرق أكثر من ${timeoutMs / 1000} ثانية — يرجى المحاولة لاحقاً`);
-    }
-    throw err;
-  } finally {
-    clearTimeout(tid);
-  }
-}
+// Discriminated union so tryEdgeFunction never throws — callers get a clean result
+type EdgeResult =
+  | { type: "success";  data:  Record<string, unknown> }
+  | { type: "business"; error: string }
+  | { type: "fallback" };
 
 function isPlaceholder(data: Record<string, unknown>): boolean {
   const msg = String(data?.message ?? data?.error ?? "").toLowerCase();
   return msg.includes("placeholder") || msg.includes("claude code must deploy");
 }
 
+async function tryEdgeFunction(
+  supabaseUrl: string,
+  headers: Record<string, string>,
+  action: string,
+  payload: Record<string, unknown>,
+): Promise<EdgeResult> {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 12_000);
+  let res: Response;
+  try {
+    res = await fetch(`${supabaseUrl}/functions/v1/admin-users`, {
+      method:  "POST",
+      signal:  controller.signal,
+      headers,
+      body:    JSON.stringify({ action, ...payload }),
+    });
+  } catch {
+    // CORS error, network error, abort, etc. → try API route
+    clearTimeout(tid);
+    return { type: "fallback" };
+  }
+  clearTimeout(tid);
+
+  let data: Record<string, unknown> = {};
+  try { data = await res.json(); } catch { /* ignore */ }
+
+  // Placeholder or "not deployed" → try API route
+  if (res.status === 501 || res.status === 404 || isPlaceholder(data)) {
+    return { type: "fallback" };
+  }
+
+  // Genuine HTTP error from a working Edge Function → surface to user
+  if (!res.ok) {
+    const errMsg = (data?.error as string) ?? `خطأ HTTP ${res.status}`;
+    return { type: "business", error: errMsg };
+  }
+
+  if (data?.error) {
+    return { type: "business", error: data.error as string };
+  }
+
+  return { type: "success", data };
+}
+
+async function callApiRoute(
+  route: { path: string; method: string },
+  headers: Record<string, string>,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 15_000);
+  let res: Response;
+  try {
+    res = await fetch(route.path, {
+      method:  route.method,
+      signal:  controller.signal,
+      headers,
+      body:    JSON.stringify(payload),
+    });
+  } catch (err) {
+    clearTimeout(tid);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("انتهت مهلة الطلب — يرجى المحاولة مجدداً");
+    }
+    throw new Error("تعذر الاتصال بالخادم — تحقق من اتصال الإنترنت");
+  }
+  clearTimeout(tid);
+
+  let data: Record<string, unknown> = {};
+  try { data = await res.json(); } catch {
+    throw new Error(`استجابة غير صالحة من الخادم (HTTP ${res.status})`);
+  }
+
+  if (!res.ok) throw new Error((data?.error as string) ?? `خطأ HTTP ${res.status}`);
+  if (data?.error) throw new Error(data.error as string);
+  return data;
+}
+
 async function adminInvoke(action: string, payload: Record<string, unknown>) {
-  // 1. Obtain the current JWT (fast — reads from in-memory cache)
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
   if (!token) {
@@ -46,78 +112,26 @@ async function adminInvoke(action: string, payload: Record<string, unknown>) {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!supabaseUrl) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL غير مضبوط في بيئة Next.js");
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL غير مضبوط");
   }
 
-  const headers = {
+  const headers: Record<string, string> = {
     "Content-Type":  "application/json",
     "Authorization": `Bearer ${token}`,
   };
-  const body = JSON.stringify({ action, ...payload });
 
-  // 2. Try Edge Function with 12-second hard timeout
-  let useApiRoute = false;
-  try {
-    const res = await fetchWithTimeout(
-      `${supabaseUrl}/functions/v1/admin-users`,
-      { method: "POST", headers, body },
-      12_000,
-    );
+  const route = ACTION_ROUTE[action];
+  if (!route) throw new Error(`action غير معروف: ${action}`);
 
-    let data: Record<string, unknown> = {};
-    try { data = await res.json(); } catch { /* ignore parse failure */ }
+  // 1. Try Edge Function (silently falls back on any network/CORS/placeholder issue)
+  const edgeResult = await tryEdgeFunction(supabaseUrl, headers, action, payload);
 
-    // Fall back if Edge Function is a placeholder (501 or placeholder body)
-    if (res.status === 501 || isPlaceholder(data)) {
-      useApiRoute = true;
-    } else if (!res.ok) {
-      const errMsg = (data?.error as string) ?? `خطأ HTTP ${res.status}`;
-      if (errMsg.includes("SERVICE_ROLE_KEY") || errMsg.includes("غير مضبوط")) {
-        throw new Error("مفتاح الخدمة غير مضبوط في Supabase Edge Function");
-      }
-      throw new Error(`تعذر حفظ الموظف: ${errMsg}`);
-    } else if (data?.error) {
-      throw new Error(`تعذر حفظ الموظف: ${data.error as string}`);
-    } else {
-      return data;
-    }
-  } catch (err) {
-    // Network errors or timeout from Edge Function → try Next.js route
-    if (err instanceof Error && (
-      err.message.includes("placeholder") ||
-      err.message.includes("استغرق") ||
-      err.message.includes("تعذر الاتصال")
-    )) {
-      useApiRoute = true;
-    } else {
-      throw err;
-    }
-  }
+  if (edgeResult.type === "success")  return edgeResult.data;
+  if (edgeResult.type === "business") throw new Error(edgeResult.error);
+  // edgeResult.type === "fallback" → use Next.js API routes
 
-  // 3. Fallback: Next.js API route (deployed on Vercel, uses service role key)
-  if (useApiRoute) {
-    const route = ACTION_ROUTE[action];
-    if (!route) throw new Error(`action غير معروف: ${action}`);
-
-    const apiRes = await fetchWithTimeout(
-      route.path,
-      { method: route.method, headers, body: JSON.stringify(payload) },
-      15_000,
-    );
-
-    let apiData: Record<string, unknown> = {};
-    try { apiData = await apiRes.json(); } catch {
-      throw new Error(`استجابة غير صالحة من API (HTTP ${apiRes.status})`);
-    }
-
-    if (!apiRes.ok) {
-      throw new Error((apiData?.error as string) ?? `خطأ HTTP ${apiRes.status}`);
-    }
-    if (apiData?.error) throw new Error(apiData.error as string);
-    return apiData;
-  }
-
-  throw new Error("تعذر تنفيذ العملية — يرجى المحاولة مجدداً");
+  // 2. Fallback: Next.js API routes (Vercel serverless, use SUPABASE_SERVICE_ROLE_KEY)
+  return callApiRoute(route, headers, payload);
 }
 
 export async function createAuthUser(data: {

@@ -75,7 +75,8 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "خطأ في إعداد الخادم" }, { status: 500 });
   }
 
-  const profileUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  // profiles table does not have updated_at column — build update map without it
+  const profileUpdate: Record<string, unknown> = {};
   if (cleanRole     !== undefined) profileUpdate.role       = cleanRole;
   if (cleanDept     !== undefined) profileUpdate.department = cleanDept;
   if (cleanIsActive !== undefined) profileUpdate.is_active  = cleanIsActive;

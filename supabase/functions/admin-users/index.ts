@@ -112,13 +112,9 @@ async function handleCreate(body: Record<string, unknown>): Promise<Response> {
   const userId = authData.user.id;
   console.log("[admin-users] auth user created:", userId);
 
-  // Step 2: Upsert profile
+  // Step 2: Upsert profile (profiles table has no updated_at column)
   const { error: profileError } = await admin.from("profiles").upsert(
-    {
-      id: userId, email, name, role, department,
-      is_active: true,
-      updated_at: new Date().toISOString(),
-    },
+    { id: userId, email, name, role, department, is_active: true },
     { onConflict: "id" }
   );
   if (profileError) {
@@ -127,8 +123,8 @@ async function handleCreate(body: Record<string, unknown>): Promise<Response> {
     return jsonResp({ error: `فشل إنشاء الملف الشخصي: ${profileError.message}` }, 500);
   }
 
-  // Step 3: Insert employee record
-  const { error: empError } = await admin.from("employees").insert([{
+  // Step 3: Upsert employee record (handles re-creation after partial rollback)
+  const { error: empError } = await admin.from("employees").upsert([{
     id:              userId,
     name,
     email,
@@ -141,7 +137,7 @@ async function handleCreate(body: Record<string, unknown>): Promise<Response> {
     performance:     3,
     tasks:           0,
     completed_tasks: 0,
-  }]);
+  }], { onConflict: "id" });
   if (empError) {
     console.error("[admin-users] employees insert error:", empError.message);
     await admin.auth.admin.deleteUser(userId).catch(() => {});
@@ -169,7 +165,8 @@ async function handleUpdate(body: Record<string, unknown>): Promise<Response> {
   try { admin = makeAdminClient(); }
   catch (err) { return jsonResp({ error: err instanceof Error ? err.message : "خطأ في إعداد الخادم" }, 500); }
 
-  const profileUpdate: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  // profiles table has no updated_at column
+  const profileUpdate: Record<string, unknown> = {};
   if (cleanRole     !== undefined) profileUpdate.role       = cleanRole;
   if (cleanDept     !== undefined) profileUpdate.department = cleanDept;
   if (cleanIsActive !== undefined) profileUpdate.is_active  = cleanIsActive;
