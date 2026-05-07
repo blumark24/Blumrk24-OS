@@ -1,43 +1,137 @@
 import { supabase } from "./supabase";
 
-// ─── Secure admin helpers (Supabase Edge Function — Service Role key stays in Supabase infra) ──
-// Uses supabase.functions.invoke() — JWT forwarded automatically from current session.
+// ─── Secure admin helpers ──────────────────────────────────────────────────────
+// Primary path: Next.js /api/admin/* routes (server-side, use SUPABASE_SERVICE_ROLE_KEY).
+// Secondary attempt: Supabase Edge Function (if fully deployed and not a placeholder).
+//
+// Design principle: any failure from the Edge Function silently falls back to
+// the API routes. Only explicit business-logic errors (403, 400, etc.) from a
+// fully-deployed Edge Function are surfaced as user-visible errors.
+
+const ACTION_ROUTE: Record<string, { path: string; method: string }> = {
+  create: { path: "/api/admin/create-user", method: "POST"   },
+  delete: { path: "/api/admin/delete-user", method: "DELETE" },
+  update: { path: "/api/admin/update-user", method: "PATCH"  },
+};
+
+// Discriminated union so tryEdgeFunction never throws — callers get a clean result
+type EdgeResult =
+  | { type: "success";  data:  Record<string, unknown> }
+  | { type: "business"; error: string }
+  | { type: "fallback" };
+
+function isPlaceholder(data: Record<string, unknown>): boolean {
+  const msg = String(data?.message ?? data?.error ?? "").toLowerCase();
+  return msg.includes("placeholder") || msg.includes("claude code must deploy");
+}
+
+async function tryEdgeFunction(
+  supabaseUrl: string,
+  headers: Record<string, string>,
+  action: string,
+  payload: Record<string, unknown>,
+): Promise<EdgeResult> {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 12_000);
+  let res: Response;
+  try {
+    res = await fetch(`${supabaseUrl}/functions/v1/admin-users`, {
+      method:  "POST",
+      signal:  controller.signal,
+      headers,
+      body:    JSON.stringify({ action, ...payload }),
+    });
+  } catch {
+    // CORS error, network error, abort, etc. → try API route
+    clearTimeout(tid);
+    return { type: "fallback" };
+  }
+  clearTimeout(tid);
+
+  let data: Record<string, unknown> = {};
+  try { data = await res.json(); } catch { /* ignore */ }
+
+  // Placeholder or "not deployed" → try API route
+  if (res.status === 501 || res.status === 404 || isPlaceholder(data)) {
+    return { type: "fallback" };
+  }
+
+  // Genuine HTTP error from a working Edge Function → surface to user
+  if (!res.ok) {
+    const errMsg = (data?.error as string) ?? `خطأ HTTP ${res.status}`;
+    return { type: "business", error: errMsg };
+  }
+
+  if (data?.error) {
+    return { type: "business", error: data.error as string };
+  }
+
+  return { type: "success", data };
+}
+
+async function callApiRoute(
+  route: { path: string; method: string },
+  headers: Record<string, string>,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 15_000);
+  let res: Response;
+  try {
+    res = await fetch(route.path, {
+      method:  route.method,
+      signal:  controller.signal,
+      headers,
+      body:    JSON.stringify(payload),
+    });
+  } catch (err) {
+    clearTimeout(tid);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("انتهت مهلة الطلب — يرجى المحاولة مجدداً");
+    }
+    throw new Error("تعذر الاتصال بالخادم — تحقق من اتصال الإنترنت");
+  }
+  clearTimeout(tid);
+
+  let data: Record<string, unknown> = {};
+  try { data = await res.json(); } catch {
+    throw new Error(`استجابة غير صالحة من الخادم (HTTP ${res.status})`);
+  }
+
+  if (!res.ok) throw new Error((data?.error as string) ?? `خطأ HTTP ${res.status}`);
+  if (data?.error) throw new Error(data.error as string);
+  return data;
+}
 
 async function adminInvoke(action: string, payload: Record<string, unknown>) {
-  const { data, error } = await supabase.functions.invoke("admin-users", {
-    body: { action, ...payload },
-  });
-
-  if (error) {
-    const raw = error.message ?? "";
-    // Detect that the Edge Function hasn't been deployed yet
-    const isNotDeployed =
-      raw.toLowerCase().includes("function not found") ||
-      raw.toLowerCase().includes("relay error") ||
-      raw.toLowerCase().includes("failed to send") ||
-      raw.toLowerCase().includes("failed to fetch") ||
-      raw.toLowerCase().includes("networkerror") ||
-      (error as { status?: number }).status === 404;
-    if (isNotDeployed) {
-      throw new Error(
-        "دالة admin-users غير منشورة في Supabase — يرجى تشغيل: supabase functions deploy admin-users"
-      );
-    }
-    // Try to parse JSON error body returned by the function
-    let msg = raw;
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed?.error) msg = parsed.error;
-    } catch { /* not JSON — use raw message */ }
-    throw new Error(msg || "فشل الطلب");
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) {
+    throw new Error("لم يتم تسجيل الدخول — يرجى تحديث الصفحة وإعادة المحاولة");
   }
 
-  // Edge Function returns { success: false, error: "..." } on business errors
-  if (data?.success === false || data?.error) {
-    throw new Error(data?.error ?? "فشل تنفيذ العملية");
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL غير مضبوط");
   }
 
-  return data;
+  const headers: Record<string, string> = {
+    "Content-Type":  "application/json",
+    "Authorization": `Bearer ${token}`,
+  };
+
+  const route = ACTION_ROUTE[action];
+  if (!route) throw new Error(`action غير معروف: ${action}`);
+
+  // 1. Try Edge Function (silently falls back on any network/CORS/placeholder issue)
+  const edgeResult = await tryEdgeFunction(supabaseUrl, headers, action, payload);
+
+  if (edgeResult.type === "success")  return edgeResult.data;
+  if (edgeResult.type === "business") throw new Error(edgeResult.error);
+  // edgeResult.type === "fallback" → use Next.js API routes
+
+  // 2. Fallback: Next.js API routes (Vercel serverless, use SUPABASE_SERVICE_ROLE_KEY)
+  return callApiRoute(route, headers, payload);
 }
 
 export async function createAuthUser(data: {
@@ -50,7 +144,8 @@ export async function createAuthUser(data: {
   salary?: number | null;
   status?: string;
 }): Promise<{ id: string }> {
-  return adminInvoke("create", data as Record<string, unknown>);
+  const result = await adminInvoke("create", data as Record<string, unknown>);
+  return result as { id: string };
 }
 
 export async function deleteAuthUser(userId: string): Promise<void> {

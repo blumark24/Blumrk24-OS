@@ -92,8 +92,9 @@ export async function POST(req: NextRequest) {
   const userId = authData.user.id;
 
   // 5. Upsert profile (rollback on failure)
+  // Note: profiles table does not have updated_at — omit it
   const { error: profileError } = await admin.from("profiles").upsert(
-    { id: userId, email, name, role, department, is_active: true, updated_at: new Date().toISOString() },
+    { id: userId, email, name, role, department, is_active: true },
     { onConflict: "id" }
   );
   if (profileError) {
@@ -101,12 +102,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `فشل إنشاء الملف الشخصي: ${profileError.message}` }, { status: 500 });
   }
 
-  // 6. Insert employee record (rollback on failure)
-  const { error: empError } = await admin.from("employees").insert([{
+  // 6. Upsert employee record (upsert handles re-creation after rollback)
+  const { error: empError } = await admin.from("employees").upsert([{
     id: userId, name, email, phone, department, role, status,
     join_date: new Date().toISOString().split("T")[0],
     performance: 3, tasks: 0, completed_tasks: 0, salary,
-  }]);
+  }], { onConflict: "id" });
   if (empError) {
     await admin.auth.admin.deleteUser(userId);
     return NextResponse.json({ error: `فشل إنشاء سجل الموظف: ${empError.message}` }, { status: 500 });
