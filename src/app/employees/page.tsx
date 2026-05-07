@@ -101,17 +101,45 @@ function EmployeesContent() {
   const closeModal = () => { setShowModal(false); };
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.email.trim()) {
-      toast.error("الاسم والبريد الإلكتروني مطلوبان");
+    const emailTrimmed = form.email.trim().toLowerCase();
+
+    if (!form.name.trim()) {
+      toast.error("الاسم الكامل مطلوب");
       return;
     }
-    if (!editId && !form.password.trim()) {
-      toast.error("كلمة المرور مطلوبة لإنشاء حساب جديد");
+    if (!emailTrimmed) {
+      toast.error("البريد الإلكتروني مطلوب");
       return;
     }
-    if (!editId && form.password.length < 6) {
-      toast.error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
+      toast.error("البريد الإلكتروني غير صالح — تأكد من الكتابة بشكل صحيح مثل user@domain.com");
       return;
+    }
+    if (!editId) {
+      if (!form.password) {
+        toast.error("كلمة المرور مطلوبة لإنشاء حساب جديد");
+        return;
+      }
+      if (form.password.length < 8) {
+        toast.error("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+        return;
+      }
+      if (!/[A-Z]/.test(form.password)) {
+        toast.error("كلمة المرور يجب أن تحتوي على حرف إنجليزي كبير (A-Z)");
+        return;
+      }
+      if (!/[a-z]/.test(form.password)) {
+        toast.error("كلمة المرور يجب أن تحتوي على حرف إنجليزي صغير (a-z)");
+        return;
+      }
+      if (!/[0-9]/.test(form.password)) {
+        toast.error("كلمة المرور يجب أن تحتوي على رقم (0-9)");
+        return;
+      }
+      if (!/[^A-Za-z0-9]/.test(form.password)) {
+        toast.error("كلمة المرور يجب أن تحتوي على رمز مثل (!@#$%^&*)");
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -127,11 +155,10 @@ function EmployeesContent() {
         });
         toast.success("تم تحديث بيانات الموظف بنجاح");
       } else {
-        // adminInvoke has a built-in 12 s AbortController — no extra race needed.
         await createAuthUser({
-          email:      form.email,
+          email:      emailTrimmed,
           password:   form.password,
-          name:       form.name,
+          name:       form.name.trim(),
           role:       form.role,
           department: form.department,
           phone:      form.phone || null,
@@ -339,9 +366,20 @@ function EmployeesContent() {
                 </div>
                 <div>
                   <label className="block text-xs text-[#8ba3c7] mb-1.5">البريد الإلكتروني *</label>
-                  <input className="input-dark text-sm" type="email" placeholder="user@example.com"
-                    value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    disabled={!!editId} />
+                  <input
+                    className="input-dark text-sm"
+                    type="email"
+                    dir="ltr"
+                    style={{ textAlign: "left" }}
+                    placeholder="user@example.com"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    inputMode="email"
+                    spellCheck={false}
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    disabled={!!editId}
+                  />
                 </div>
               </div>
 
@@ -352,7 +390,7 @@ function EmployeesContent() {
                     <input
                       className="input-dark text-sm pl-10"
                       type={showPass ? "text" : "password"}
-                      placeholder="6 أحرف على الأقل"
+                      placeholder="مثال: Test@123456"
                       value={form.password}
                       onChange={(e) => setForm({ ...form, password: e.target.value })}
                     />
@@ -364,7 +402,7 @@ function EmployeesContent() {
                       {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
                   </div>
-                  <p className="text-[10px] text-[#6b87ab] mt-1">سيتم إنشاء حساب دخول حقيقي بالبريد وكلمة المرور</p>
+                  <p className="text-[10px] text-[#6b87ab] mt-1">8 أحرف على الأقل · حرف كبير · حرف صغير · رقم · رمز (!@#$...)</p>
                 </div>
               )}
 
