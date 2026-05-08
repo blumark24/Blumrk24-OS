@@ -81,54 +81,57 @@ async function verifyAdmin(token: string): Promise<VerifyResult> {
 // ─── POST handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  console.log(`${TAG} POST received from ${req.headers.get("x-forwarded-for") ?? "unknown"}`);
+  console.log(`${TAG} start — from ${req.headers.get("x-forwarded-for") ?? "unknown"}`);
 
-  // 1. Authenticate caller
+  // ── Step 1: Authenticate caller ───────────────────────────────────────────────
   const authHeader = req.headers.get("authorization") ?? "";
   if (!authHeader.startsWith("Bearer ")) {
-    return apiError(401, "Authorization header مفقود أو غير صالح", "no Bearer prefix in Authorization header");
+    return apiError(401, "Authorization header مفقود أو غير صالح", "step=auth: no Bearer prefix");
   }
 
   const identity = await verifyAdmin(authHeader.slice(7));
   if (!identity.ok) {
-    return apiError(403, identity.error, identity.debug);
+    return apiError(403, identity.error, `step=auth: ${identity.debug}`);
   }
-  console.log(`${TAG} caller verified: ${identity.callerEmail}`);
+  console.log(`${TAG} step=auth ok — caller: ${identity.callerEmail}`);
 
-  // 2. Parse request body
+  // ── Step 2: Parse JSON body ───────────────────────────────────────────────────
   let body: Record<string, unknown>;
   try {
     body = await req.json();
   } catch (e) {
-    return apiError(400, "طلب غير صالح — تعذر قراءة البيانات المرسلة", `JSON.parse error: ${String(e)}`);
+    return apiError(400, "طلب غير صالح — تعذر قراءة البيانات المرسلة", `step=parse: ${String(e)}`);
   }
 
-  // 3. Pre-sanitise email and map role BEFORE validation
-  // Strip RTL/LTR marks, zero-width chars, Arabic comma, then trim + lowercase
+  // ── Step 3: Clean email + map Arabic role → English BEFORE validation ─────────
   const rawEmailInput = typeof body.email === "string" ? body.email : "";
   const email = rawEmailInput
     // eslint-disable-next-line no-control-regex
-    .replace(/[^\x00-\x7F]/g, "")   // strip all non-ASCII (invisible RTL marks, Arabic comma ،, etc.)
-    .replace(/\s/g, "")              // strip any whitespace that slipped in
+    .replace(/[^\x00-\x7F]/g, "")  // strip non-ASCII: RTL/LTR marks, Arabic comma ،, zero-width chars
+    .replace(/\s/g, "")             // strip any whitespace
     .trim()
     .toLowerCase();
 
-  if (email !== rawEmailInput.trim().toLowerCase()) {
-    console.warn(`${TAG} email pre-cleaned — raw: ${JSON.stringify(rawEmailInput)}, clean: ${email}`);
-  }
+  console.log(`${TAG} step=clean email: raw=${JSON.stringify(rawEmailInput)} → clean=${email}`);
 
-  // Map Arabic role labels → English system roles (safety net for any client that sends Arabic)
   const ARABIC_TO_ROLE: Record<string, string> = {
-    "مدير أعلى":          "super_admin",
+    "مدير أعلى":           "super_admin",
+    "مدير عام":            "super_admin",
+    "عضو مجلس الإدارة":   "board_member",
+    "مدير الدفاع":         "defense_manager",
+    "مدير وكالة الدفاع":  "defense_manager",
+    "مدير الهجوم":         "attack_manager",
+    "مدير وكالة الهجوم":  "attack_manager",
+    "مدير المالية":        "finance_manager",
+    "مدير مالي":           "finance_manager",
     "موظف":                "employee",
-    "مدير مالي":          "finance_manager",
-    "عضو مجلس الإدارة":  "board_member",
-    "مدير وكالة الدفاع": "defense_manager",
-    "مدير وكالة الهجوم": "attack_manager",
   };
-  const rawRole   = typeof body.role === "string" ? body.role : "employee";
+  const rawRole    = typeof body.role === "string" ? body.role : "employee";
   const mappedRole = ARABIC_TO_ROLE[rawRole] ?? rawRole;
 
+  console.log(`${TAG} step=role map: raw=${rawRole} → mapped=${mappedRole}`);
+
+  // ── Step 4: Validate ──────────────────────────────────────────────────────────
   const validationError = firstError(
     validateEmail(email),
     validatePassword(body.password),
@@ -139,11 +142,11 @@ export async function POST(req: NextRequest) {
     return apiError(
       400,
       validationError,
-      `validation: email=${JSON.stringify(email)}, role=${mappedRole} (raw=${rawRole}), name=${JSON.stringify(body.name)}, pwdLen=${typeof body.password === "string" ? body.password.length : "?"}`
+      `step=validate: email=${email}, role=${mappedRole}, name=${JSON.stringify(body.name)}, pwdLen=${typeof body.password === "string" ? body.password.length : "?"}`,
     );
   }
 
-  // 4. Sanitise remaining inputs
+  // ── Step 5: Sanitise remaining inputs ─────────────────────────────────────────
   const password   = body.password as string;
   const name       = typeof body.name === "string" ? body.name.trim() : email.split("@")[0];
   const role       = mappedRole;
@@ -152,17 +155,18 @@ export async function POST(req: NextRequest) {
   const salary     = typeof body.salary === "number" && body.salary >= 0 ? body.salary : null;
   const status     = body.status === "غير_نشط" ? "غير_نشط" : "نشط";
 
-  console.log(`${TAG} creating: email=${email}, role=${role}, dept=${department}`);
+  console.log(`${TAG} step=sanitise: email=${email}, role=${role}, dept=${department}, status=${status}`);
 
-  // 5. Build service-role client
+  // ── Step 6: Build service-role client ─────────────────────────────────────────
   let admin: ReturnType<typeof serviceClient>;
   try {
     admin = serviceClient();
   } catch (e) {
-    return apiError(500, e instanceof Error ? e.message : "خطأ في إعداد خادم Supabase", `serviceClient: ${String(e)}`);
+    return apiError(500, e instanceof Error ? e.message : "خطأ في إعداد خادم Supabase", `step=client: ${String(e)}`);
   }
 
-  // 6. Create Supabase Auth user
+  // ── Step 7: Create Supabase Auth user ─────────────────────────────────────────
+  console.log(`${TAG} step=auth.createUser: email=${email}`);
   const { data: authData, error: authError } = await admin.auth.admin.createUser({
     email,
     password,
@@ -170,46 +174,52 @@ export async function POST(req: NextRequest) {
     user_metadata: { name },
   });
   if (authError) {
-    const msg = authError.message.toLowerCase();
-    const isAlreadyExists = msg.includes("already") || msg.includes("registered") || msg.includes("exists");
-    const userMsg = isAlreadyExists
-      ? `البريد الإلكتروني (${email}) مسجل مسبقاً في النظام — استخدم بريداً مختلفاً أو احذف الحساب القديم من Supabase Auth`
+    const lower = authError.message.toLowerCase();
+    const alreadyExists = lower.includes("already") || lower.includes("registered") || lower.includes("exists");
+    const userMsg = alreadyExists
+      ? `البريد الإلكتروني (${email}) مسجل مسبقاً — احذف الحساب القديم من Supabase Auth أو استخدم بريداً مختلفاً`
       : `فشل إنشاء حساب المستخدم: ${authError.message}`;
-    return apiError(400, userMsg, `auth.admin.createUser: ${authError.message}`);
+    console.error(`${TAG} step=auth.createUser error: ${authError.message}`);
+    return apiError(400, userMsg, `step=auth.createUser: ${authError.message}`);
   }
 
   const userId = authData.user.id;
-  console.log(`${TAG} auth user created: ${userId}`);
+  console.log(`${TAG} step=auth.createUser ok: userId=${userId}`);
 
-  // 7. Upsert profile row (profiles table has no updated_at column)
+  // ── Step 8: Upsert profiles row ───────────────────────────────────────────────
+  console.log(`${TAG} step=profiles.upsert: userId=${userId}`);
   const { error: profileError } = await admin.from("profiles").upsert(
     { id: userId, email, name, role, department, is_active: true },
-    { onConflict: "id" }
+    { onConflict: "id" },
   );
   if (profileError) {
-    console.error(`${TAG} profiles.upsert failed for ${userId}: ${profileError.message} — rolling back`);
+    console.error(`${TAG} step=profiles.upsert error: ${profileError.message} — rolling back auth user`);
     const { error: rollbackErr } = await admin.auth.admin.deleteUser(userId);
-    if (rollbackErr) console.error(`${TAG} rollback (deleteUser ${userId}) failed: ${rollbackErr.message}`);
-    return apiError(500, `فشل إنشاء الملف الشخصي: ${profileError.message}`, `profiles.upsert: ${profileError.message}`);
+    if (rollbackErr) console.error(`${TAG} rollback.deleteUser error: ${rollbackErr.message}`);
+    return apiError(500, `فشل إنشاء الملف الشخصي: ${profileError.message}`, `step=profiles.upsert: ${profileError.message}`);
   }
-  console.log(`${TAG} profile upserted: ${userId}`);
+  console.log(`${TAG} step=profiles.upsert ok`);
 
-  // 8. Upsert employee row
-  const { error: empError } = await admin.from("employees").upsert([{
-    id: userId, name, email, phone, department, role, status,
-    join_date:       new Date().toISOString().split("T")[0],
-    performance:     3,
-    tasks:           0,
-    completed_tasks: 0,
-    salary,
-  }], { onConflict: "id" });
+  // ── Step 9: Upsert employees row ──────────────────────────────────────────────
+  console.log(`${TAG} step=employees.upsert: userId=${userId}`);
+  const { error: empError } = await admin.from("employees").upsert(
+    [{
+      id: userId, name, email, phone, department, role, status, salary,
+      join_date:       new Date().toISOString().split("T")[0],
+      performance:     3,
+      tasks:           0,
+      completed_tasks: 0,
+    }],
+    { onConflict: "id" },
+  );
   if (empError) {
-    console.error(`${TAG} employees.upsert failed for ${userId}: ${empError.message} — rolling back`);
+    console.error(`${TAG} step=employees.upsert error: ${empError.message} — rolling back auth user`);
     const { error: rollbackErr } = await admin.auth.admin.deleteUser(userId);
-    if (rollbackErr) console.error(`${TAG} rollback (deleteUser ${userId}) failed: ${rollbackErr.message}`);
-    return apiError(500, `فشل إنشاء سجل الموظف: ${empError.message}`, `employees.upsert: ${empError.message}`);
+    if (rollbackErr) console.error(`${TAG} rollback.deleteUser error: ${rollbackErr.message}`);
+    return apiError(500, `فشل إنشاء سجل الموظف: ${empError.message}`, `step=employees.upsert: ${empError.message}`);
   }
+  console.log(`${TAG} step=employees.upsert ok`);
 
-  console.log(`${TAG} SUCCESS: userId=${userId}, email=${email}`);
+  console.log(`${TAG} SUCCESS: userId=${userId}, email=${email}, role=${role}`);
   return NextResponse.json({ success: true, id: userId, name });
 }

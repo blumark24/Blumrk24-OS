@@ -128,14 +128,20 @@ async function adminInvoke(action: string, payload: Record<string, unknown>) {
   const route = ACTION_ROUTE[action];
   if (!route) throw new Error(`action غير معروف: ${action}`);
 
-  // 1. Try Edge Function (silently falls back on any network/CORS/placeholder issue)
+  // "create" goes directly to the Next.js API route — it runs inside Vercel and
+  // can read SUPABASE_SERVICE_ROLE_KEY. Skipping the Edge Function avoids a
+  // 12-second timeout when the function is not deployed, which was causing the
+  // button to stay on "جاري الحفظ" and sometimes surface a confusing 400.
+  if (action === "create") {
+    return callApiRoute(route, headers, payload);
+  }
+
+  // For delete/update: try Edge Function first, fall back to API route on any failure.
   const edgeResult = await tryEdgeFunction(supabaseUrl, headers, action, payload);
 
   if (edgeResult.type === "success")  return edgeResult.data;
   if (edgeResult.type === "business") throw new Error(edgeResult.error);
-  // edgeResult.type === "fallback" → use Next.js API routes
 
-  // 2. Fallback: Next.js API routes (Vercel serverless, use SUPABASE_SERVICE_ROLE_KEY)
   return callApiRoute(route, headers, payload);
 }
 
