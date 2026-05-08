@@ -48,8 +48,15 @@ async function tryEdgeFunction(
   }
   clearTimeout(tid);
 
+  // Keep the AbortController alive while reading the body — prevents res.json()
+  // from hanging if the Edge Function sends headers but never finishes the body.
   let data: Record<string, unknown> = {};
-  try { data = await res.json(); } catch { /* ignore */ }
+  let bodyOk = true;
+  try { data = await res.json(); } catch { bodyOk = false; }
+  clearTimeout(tid);
+
+  // Body read timed-out or failed → treat as undeployed / broken, fall back
+  if (!bodyOk) return { type: "fallback" };
 
   // Placeholder or "not deployed" → try API route
   if (res.status === 501 || res.status === 404 || isPlaceholder(data)) {
@@ -86,17 +93,26 @@ async function callApiRoute(
     });
   } catch (err) {
     clearTimeout(tid);
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("انتهت مهلة الحفظ — تحقق من اتصال Supabase أو سجلات Vercel");
+    if ((err instanceof DOMException && err.name === "AbortError") ||
+        (err instanceof Error && err.name === "AbortError")) {
+      throw new Error("انتهت مهلة الحفظ (12 ثانية) — تحقق من اتصال الإنترنت أو سجلات Vercel");
     }
     throw new Error("تعذر الاتصال بالخادم — تحقق من اتصال الإنترنت");
   }
-  clearTimeout(tid);
-
+  // Keep AbortController alive while reading body — prevents hanging if server
+  // sends headers but the body stream never completes (same bug as Edge Function).
   let data: Record<string, unknown> = {};
-  try { data = await res.json(); } catch {
+  try {
+    data = await res.json();
+  } catch (bodyErr) {
+    clearTimeout(tid);
+    if ((bodyErr instanceof DOMException && bodyErr.name === "AbortError") ||
+        (bodyErr instanceof Error && bodyErr.name === "AbortError")) {
+      throw new Error("انتهت مهلة قراءة الاستجابة — تحقق من سجلات Vercel");
+    }
     throw new Error(`استجابة غير صالحة من الخادم (HTTP ${res.status})`);
   }
+  clearTimeout(tid);
 
   if (!res.ok) {
     // Include debug info from server so the toast is actionable
