@@ -146,8 +146,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      // Strip RTL/LTR marks, zero-width chars, Arabic comma, then trim + lowercase.
+      // Mirrors the server-side cleaning so an Arabic-keyboard paste doesn't fail silently.
+      const cleanEmail = email
+        // eslint-disable-next-line no-control-regex
+        .replace(/[^\x00-\x7F]/g, "")
+        .replace(/\s/g, "")
+        .trim()
+        .toLowerCase();
+
+      if (!cleanEmail) {
+        return { ok: false, error: "البريد الإلكتروني مطلوب" };
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
       if (error) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes("rate") || msg.includes("too many")) {
+          return { ok: false, error: "محاولات كثيرة — انتظر دقيقة ثم حاول مرة أخرى" };
+        }
+        if (msg.includes("not confirmed") || msg.includes("email not")) {
+          return { ok: false, error: "البريد غير مؤكَّد — افتح رابط التأكيد المرسل إلى بريدك" };
+        }
+        if (msg.includes("network") || msg.includes("fetch")) {
+          return { ok: false, error: "تعذر الاتصال بخادم المصادقة — تحقق من الإنترنت" };
+        }
         return { ok: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
       }
       router.replace("/");

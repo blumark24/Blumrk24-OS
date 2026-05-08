@@ -84,9 +84,16 @@ async function handleCreate(body: Record<string, unknown>): Promise<Response> {
   const salary     = typeof body.salary     === "number" && body.salary >= 0 ? body.salary    : null;
   const status     = body.status === "غير_نشط" ? "غير_نشط" : "نشط";
 
-  if (!email)                            return jsonResp({ error: "البريد الإلكتروني مطلوب" }, 400);
-  if (!password || password.length < 6) return jsonResp({ error: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" }, 400);
-  if (!name)                             return jsonResp({ error: "الاسم مطلوب" }, 400);
+  if (!email)  return jsonResp({ error: "البريد الإلكتروني مطلوب" }, 400);
+  if (!name)   return jsonResp({ error: "الاسم مطلوب" }, 400);
+
+  // Password rules — must match src/lib/apiValidation.ts so both code paths agree.
+  if (!password || password.length < 8)        return jsonResp({ error: "كلمة المرور يجب أن تكون 8 أحرف على الأقل" }, 400);
+  if (password.length > 128)                   return jsonResp({ error: "كلمة المرور طويلة جداً" }, 400);
+  if (!/[A-Z]/.test(password))                 return jsonResp({ error: "كلمة المرور يجب أن تحتوي على حرف إنجليزي كبير (A-Z)" }, 400);
+  if (!/[a-z]/.test(password))                 return jsonResp({ error: "كلمة المرور يجب أن تحتوي على حرف إنجليزي صغير (a-z)" }, 400);
+  if (!/[0-9]/.test(password))                 return jsonResp({ error: "كلمة المرور يجب أن تحتوي على رقم (0-9)" }, 400);
+  if (!/[^A-Za-z0-9]/.test(password))          return jsonResp({ error: "كلمة المرور يجب أن تحتوي على رمز مثل (!@#$%^&*)" }, 400);
 
   let admin;
   try { admin = makeAdminClient(); }

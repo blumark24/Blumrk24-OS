@@ -8,7 +8,7 @@ import { usePermissions, ROLE_LABELS, UserRole } from "@/contexts/PermissionsCon
 import { useEmployees } from "@/hooks/useData";
 import { useToast } from "@/contexts/ToastContext";
 import PageGuard from "@/components/ui/PageGuard";
-import { createAuthUser, deleteAuthUser } from "@/lib/db";
+import { createAuthUser, deleteAuthUser, updateAuthUser } from "@/lib/db";
 import { withSoftTimeout } from "@/lib/asyncHelpers";
 
 const statusBadge = (status: string) =>
@@ -127,6 +127,7 @@ function EmployeesContent() {
     setSaving(true);
     try {
       if (editId) {
+        // Update employees table (visible row in this page)
         await update(editId, {
           name:       form.name.trim(),
           email:      cleanEmail,
@@ -136,7 +137,22 @@ function EmployeesContent() {
           status:     form.status,
           salary:     form.salary ? Number(form.salary) : undefined,
         });
-        toast.success("تم تحديث بيانات الموظف بنجاح");
+        // Also propagate role/department/active/name to profiles + auth metadata,
+        // otherwise the user's effective permissions never change.
+        try {
+          await updateAuthUser(editId, {
+            role:       form.role,
+            department: form.department,
+            isActive:   form.status === "نشط",
+            name:       form.name.trim(),
+          });
+        } catch (profileErr) {
+          // Surface the profile-update failure but don't undo the employee row change.
+          const m = profileErr instanceof Error ? profileErr.message : String(profileErr);
+          toast.error(`تم حفظ سجل الموظف، لكن تحديث الصلاحيات فشل: ${m}`);
+          throw profileErr;
+        }
+        toast.success("تم تحديث بيانات الموظف وصلاحياته بنجاح");
       } else {
         await createAuthUser({
           email:      cleanEmail,
