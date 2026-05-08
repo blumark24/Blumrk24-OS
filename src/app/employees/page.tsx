@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { DEPARTMENTS } from "@/lib/utils";
 import { Users, Plus, Search, Star, Edit2, Trash2, X, Eye, EyeOff } from "lucide-react";
@@ -9,7 +9,7 @@ import { useEmployees } from "@/hooks/useData";
 import { useToast } from "@/contexts/ToastContext";
 import PageGuard from "@/components/ui/PageGuard";
 import { createAuthUser, deleteAuthUser } from "@/lib/db";
-import { withSoftTimeout } from "@/lib/asyncHelpers";
+import { withSoftTimeout, withTimeout } from "@/lib/asyncHelpers";
 
 const statusBadge = (status: string) =>
   status === "نشط" ? "status-active" : "status-inactive";
@@ -69,6 +69,17 @@ function EmployeesContent() {
     role: "employee", status: "نشط", salary: "",
   });
 
+  // Safety net: if saving is stuck (network issue, unhandled error, etc.)
+  // force-reset the spinner after 20 s so the button never hangs forever.
+  useEffect(() => {
+    if (!saving) return;
+    const timer = setTimeout(() => {
+      setSaving(false);
+      toast.error("انتهت مهلة الحفظ (20 ثانية) — تحقق من اتصالك بالإنترنت وحاول مرة أخرى");
+    }, 20_000);
+    return () => clearTimeout(timer);
+  }, [saving]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filtered = employees.filter((e) => {
     const q = search.toLowerCase();
     return (deptFilter === "الكل" || e.department === deptFilter)
@@ -101,22 +112,18 @@ function EmployeesContent() {
   const closeModal = () => { setShowModal(false); };
 
   const handleSave = async () => {
-    // Strip invisible RTL/LTR marks, Arabic comma, whitespace — same logic as server
-    const cleanEmail = form.email
-      // eslint-disable-next-line no-control-regex
-      .replace(/[^\x00-\x7F]/g, "")
-      .replace(/\s/g, "")
-      .trim()
-      .toLowerCase();
+    // ── client-side clean + validate ──────────────────────────────────────────
+    // eslint-disable-next-line no-control-regex
+    const cleanEmail = form.email.replace(/[^\x00-\x7F]/g, "").replace(/\s/g, "").trim().toLowerCase();
 
     if (!form.name.trim()) { toast.error("الاسم الكامل مطلوب"); return; }
-    if (!cleanEmail)        { toast.error("البريد الإلكتروني مطلوب"); return; }
+    if (!cleanEmail) { toast.error("البريد الإلكتروني مطلوب"); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       toast.error("البريد الإلكتروني غير صالح — مثال: user@domain.com");
       return;
     }
     if (!editId) {
-      if (!form.password) { toast.error("كلمة المرور مطلوبة لإنشاء حساب جديد"); return; }
+      if (!form.password)                       { toast.error("كلمة المرور مطلوبة لإنشاء حساب جديد"); return; }
       if (form.password.length < 8)             { toast.error("كلمة المرور يجب أن تكون 8 أحرف على الأقل"); return; }
       if (!/[A-Z]/.test(form.password))         { toast.error("كلمة المرور يجب أن تحتوي على حرف كبير (A-Z)"); return; }
       if (!/[a-z]/.test(form.password))         { toast.error("كلمة المرور يجب أن تحتوي على حرف صغير (a-z)"); return; }
@@ -138,25 +145,40 @@ function EmployeesContent() {
         });
         toast.success("تم تحديث بيانات الموظف بنجاح");
       } else {
-        await createAuthUser({
-          email:      cleanEmail,
-          password:   form.password,
-          name:       form.name.trim(),
-          role:       form.role,
-          department: form.department,
-          phone:      form.phone || null,
-          salary:     form.salary ? Number(form.salary) : null,
-          status:     form.status,
-        });
-        // Soft-timeout: refresh list but do NOT block modal close on slow reads
+        // Hard 15-second client timeout — button NEVER hangs beyond this.
+        // (Network AbortController in db.ts fires at 12 s; this is the fallback.)
+        await withTimeout(
+          createAuthUser({
+            email:      cleanEmail,
+            password:   form.password,
+            name:       form.name.trim(),
+            role:       form.role,
+            department: form.department,
+            phone:      form.phone || null,
+            salary:     form.salary ? Number(form.salary) : null,
+            status:     form.status,
+          }),
+          15_000,
+          "انتهت مهلة الحفظ (15 ثانية) — تحقق من اتصالك بالإنترنت وحاول مرة أخرى",
+        );
+        // Refresh the list with a soft timeout so a slow DB read never blocks the modal
         await withSoftTimeout(refetch(), 6_000);
-        toast.success(`تمت إضافة ${form.name} وإنشاء حساب الدخول بنجاح`);
+        toast.success(`تم إنشاء حساب ${form.name.trim()} بنجاح`);
       }
       closeModal();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "حدث خطأ أثناء الحفظ";
+      const raw = err instanceof Error ? err.message : "حدث خطأ أثناء الحفظ";
+      // Map common Supabase / server errors to clear Arabic messages
+      let msg = raw;
+      if (/مسجل مسبقاً|already|registered|exists/i.test(raw)) {
+        msg = `البريد الإلكتروني (${cleanEmail}) مستخدم مسبقاً — جرّب بريداً آخر أو احذف الحساب القديم من Supabase Auth`;
+      } else if (/service_role|SERVICE_ROLE_KEY/i.test(raw)) {
+        msg = "خطأ في إعداد الخادم — تحقق من إضافة SUPABASE_SERVICE_ROLE_KEY في Vercel";
+      } else if (/invalid email/i.test(raw)) {
+        msg = "البريد الإلكتروني غير صالح — تأكد من الكتابة بشكل صحيح";
+      }
       toast.error(msg);
-      console.error("[Employees Save Error]", err);
+      console.error("[Employees handleSave] raw error:", raw);
     } finally {
       setSaving(false);
     }

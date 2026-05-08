@@ -42,14 +42,20 @@ async function tryEdgeFunction(
       body:    JSON.stringify({ action, ...payload }),
     });
   } catch {
-    // CORS error, network error, abort, etc. → try API route
+    // CORS error, network error, abort timeout, etc. → fall back to API route
     clearTimeout(tid);
     return { type: "fallback" };
   }
-  clearTimeout(tid);
+  // DO NOT clearTimeout here — keep the timer running so it can abort res.json()
+  // if the Edge Function sends headers but never finishes the response body.
 
   let data: Record<string, unknown> = {};
-  try { data = await res.json(); } catch { /* ignore */ }
+  let bodyOk = true;
+  try { data = await res.json(); } catch { bodyOk = false; }
+  clearTimeout(tid); // safe to clear now — body read finished (or timed out)
+
+  // Body read timed-out or failed → treat as undeployed / broken, fall back
+  if (!bodyOk) return { type: "fallback" };
 
   // Placeholder or "not deployed" → try API route
   if (res.status === 501 || res.status === 404 || isPlaceholder(data)) {
@@ -86,17 +92,26 @@ async function callApiRoute(
     });
   } catch (err) {
     clearTimeout(tid);
-    if (err instanceof DOMException && err.name === "AbortError") {
-      throw new Error("انتهت مهلة الحفظ — تحقق من اتصال Supabase أو سجلات Vercel");
+    if ((err instanceof DOMException && err.name === "AbortError") ||
+        (err instanceof Error && err.name === "AbortError")) {
+      throw new Error("انتهت مهلة الحفظ (12 ثانية) — تحقق من اتصال الإنترنت أو سجلات Vercel");
     }
     throw new Error("تعذر الاتصال بالخادم — تحقق من اتصال الإنترنت");
   }
-  clearTimeout(tid);
-
+  // Keep AbortController alive while reading body — prevents hanging if server
+  // sends headers but the body stream never completes (same bug as Edge Function).
   let data: Record<string, unknown> = {};
-  try { data = await res.json(); } catch {
+  try {
+    data = await res.json();
+  } catch (bodyErr) {
+    clearTimeout(tid);
+    if ((bodyErr instanceof DOMException && bodyErr.name === "AbortError") ||
+        (bodyErr instanceof Error && bodyErr.name === "AbortError")) {
+      throw new Error("انتهت مهلة قراءة الاستجابة — تحقق من سجلات Vercel");
+    }
     throw new Error(`استجابة غير صالحة من الخادم (HTTP ${res.status})`);
   }
+  clearTimeout(tid);
 
   if (!res.ok) {
     // Include debug info from server so the toast is actionable
@@ -128,14 +143,20 @@ async function adminInvoke(action: string, payload: Record<string, unknown>) {
   const route = ACTION_ROUTE[action];
   if (!route) throw new Error(`action غير معروف: ${action}`);
 
-  // 1. Try Edge Function (silently falls back on any network/CORS/placeholder issue)
+  // "create" goes directly to the Next.js API route — it runs inside Vercel and
+  // can read SUPABASE_SERVICE_ROLE_KEY. Skipping the Edge Function avoids a
+  // 12-second timeout when the function is not deployed, which was causing the
+  // button to stay on "جاري الحفظ" and sometimes surface a confusing 400.
+  if (action === "create") {
+    return callApiRoute(route, headers, payload);
+  }
+
+  // For delete/update: try Edge Function first, fall back to API route on any failure.
   const edgeResult = await tryEdgeFunction(supabaseUrl, headers, action, payload);
 
   if (edgeResult.type === "success")  return edgeResult.data;
   if (edgeResult.type === "business") throw new Error(edgeResult.error);
-  // edgeResult.type === "fallback" → use Next.js API routes
 
-  // 2. Fallback: Next.js API routes (Vercel serverless, use SUPABASE_SERVICE_ROLE_KEY)
   return callApiRoute(route, headers, payload);
 }
 
