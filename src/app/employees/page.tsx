@@ -101,52 +101,35 @@ function EmployeesContent() {
   const closeModal = () => { setShowModal(false); };
 
   const handleSave = async () => {
-    const emailTrimmed = form.email.trim().toLowerCase();
+    // Strip invisible RTL/LTR marks, Arabic comma, whitespace — same logic as server
+    const cleanEmail = form.email
+      // eslint-disable-next-line no-control-regex
+      .replace(/[^\x00-\x7F]/g, "")
+      .replace(/\s/g, "")
+      .trim()
+      .toLowerCase();
 
-    if (!form.name.trim()) {
-      toast.error("الاسم الكامل مطلوب");
-      return;
-    }
-    if (!emailTrimmed) {
-      toast.error("البريد الإلكتروني مطلوب");
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
-      toast.error("البريد الإلكتروني غير صالح — تأكد من الكتابة بشكل صحيح مثل user@domain.com");
+    if (!form.name.trim()) { toast.error("الاسم الكامل مطلوب"); return; }
+    if (!cleanEmail)        { toast.error("البريد الإلكتروني مطلوب"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      toast.error("البريد الإلكتروني غير صالح — مثال: user@domain.com");
       return;
     }
     if (!editId) {
-      if (!form.password) {
-        toast.error("كلمة المرور مطلوبة لإنشاء حساب جديد");
-        return;
-      }
-      if (form.password.length < 8) {
-        toast.error("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
-        return;
-      }
-      if (!/[A-Z]/.test(form.password)) {
-        toast.error("كلمة المرور يجب أن تحتوي على حرف إنجليزي كبير (A-Z)");
-        return;
-      }
-      if (!/[a-z]/.test(form.password)) {
-        toast.error("كلمة المرور يجب أن تحتوي على حرف إنجليزي صغير (a-z)");
-        return;
-      }
-      if (!/[0-9]/.test(form.password)) {
-        toast.error("كلمة المرور يجب أن تحتوي على رقم (0-9)");
-        return;
-      }
-      if (!/[^A-Za-z0-9]/.test(form.password)) {
-        toast.error("كلمة المرور يجب أن تحتوي على رمز مثل (!@#$%^&*)");
-        return;
-      }
+      if (!form.password) { toast.error("كلمة المرور مطلوبة لإنشاء حساب جديد"); return; }
+      if (form.password.length < 8)             { toast.error("كلمة المرور يجب أن تكون 8 أحرف على الأقل"); return; }
+      if (!/[A-Z]/.test(form.password))         { toast.error("كلمة المرور يجب أن تحتوي على حرف كبير (A-Z)"); return; }
+      if (!/[a-z]/.test(form.password))         { toast.error("كلمة المرور يجب أن تحتوي على حرف صغير (a-z)"); return; }
+      if (!/[0-9]/.test(form.password))         { toast.error("كلمة المرور يجب أن تحتوي على رقم (0-9)"); return; }
+      if (!/[^A-Za-z0-9]/.test(form.password)) { toast.error("كلمة المرور يجب أن تحتوي على رمز (!@#$%^&*)"); return; }
     }
+
     setSaving(true);
     try {
       if (editId) {
         await update(editId, {
-          name:       form.name,
-          email:      form.email,
+          name:       form.name.trim(),
+          email:      cleanEmail,
           phone:      form.phone,
           department: form.department,
           role:       form.role as never,
@@ -156,7 +139,7 @@ function EmployeesContent() {
         toast.success("تم تحديث بيانات الموظف بنجاح");
       } else {
         await createAuthUser({
-          email:      emailTrimmed,
+          email:      cleanEmail,
           password:   form.password,
           name:       form.name.trim(),
           role:       form.role,

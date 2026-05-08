@@ -103,36 +103,54 @@ export async function POST(req: NextRequest) {
     return apiError(400, "طلب غير صالح — تعذر قراءة البيانات المرسلة", `JSON.parse error: ${String(e)}`);
   }
 
-  // 3. Validate fields
+  // 3. Pre-sanitise email and map role BEFORE validation
+  // Strip RTL/LTR marks, zero-width chars, Arabic comma, then trim + lowercase
+  const rawEmailInput = typeof body.email === "string" ? body.email : "";
+  const email = rawEmailInput
+    // eslint-disable-next-line no-control-regex
+    .replace(/[^\x00-\x7F]/g, "")   // strip all non-ASCII (invisible RTL marks, Arabic comma ،, etc.)
+    .replace(/\s/g, "")              // strip any whitespace that slipped in
+    .trim()
+    .toLowerCase();
+
+  if (email !== rawEmailInput.trim().toLowerCase()) {
+    console.warn(`${TAG} email pre-cleaned — raw: ${JSON.stringify(rawEmailInput)}, clean: ${email}`);
+  }
+
+  // Map Arabic role labels → English system roles (safety net for any client that sends Arabic)
+  const ARABIC_TO_ROLE: Record<string, string> = {
+    "مدير أعلى":          "super_admin",
+    "موظف":                "employee",
+    "مدير مالي":          "finance_manager",
+    "عضو مجلس الإدارة":  "board_member",
+    "مدير وكالة الدفاع": "defense_manager",
+    "مدير وكالة الهجوم": "attack_manager",
+  };
+  const rawRole   = typeof body.role === "string" ? body.role : "employee";
+  const mappedRole = ARABIC_TO_ROLE[rawRole] ?? rawRole;
+
   const validationError = firstError(
-    validateEmail(body.email),
+    validateEmail(email),
     validatePassword(body.password),
-    validateRole(body.role),
+    validateRole(mappedRole),
     validateName(body.name),
   );
   if (validationError) {
     return apiError(
       400,
       validationError,
-      `validation: email=${JSON.stringify(body.email)}, role=${body.role}, name=${JSON.stringify(body.name)}, pwdLen=${typeof body.password === "string" ? body.password.length : "?"}`
+      `validation: email=${JSON.stringify(email)}, role=${mappedRole} (raw=${rawRole}), name=${JSON.stringify(body.name)}, pwdLen=${typeof body.password === "string" ? body.password.length : "?"}`
     );
   }
 
-  // 4. Sanitise inputs — strip non-ASCII from email (RTL invisible chars, etc.)
-  const rawEmail   = (body.email as string).trim().toLowerCase();
-  // eslint-disable-next-line no-control-regex
-  const email      = rawEmail.replace(/[^\x00-\x7F]/g, "").trim();
+  // 4. Sanitise remaining inputs
   const password   = body.password as string;
   const name       = typeof body.name === "string" ? body.name.trim() : email.split("@")[0];
-  const role       = typeof body.role === "string" ? body.role : "employee";
+  const role       = mappedRole;
   const department = typeof body.department === "string" ? body.department.slice(0, 100) : "";
   const phone      = typeof body.phone  === "string" ? body.phone.slice(0, 20) : null;
   const salary     = typeof body.salary === "number" && body.salary >= 0 ? body.salary : null;
   const status     = body.status === "غير_نشط" ? "غير_نشط" : "نشط";
-
-  if (email !== rawEmail) {
-    console.warn(`${TAG} email contained non-ASCII chars — raw: ${JSON.stringify(rawEmail)}, cleaned: ${email}`);
-  }
 
   console.log(`${TAG} creating: email=${email}, role=${role}, dept=${department}`);
 
