@@ -235,7 +235,15 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   //    (which reads directly from profiles table by auth user id).
   //    managedUsers is used only for the admin panel — never to determine
   //    the current user's own role, to avoid async race conditions.
-  const userRole: UserRole = mapAuthRoleToUserRole(user?.role ?? "");
+  // Ensure we derive the current user's role ONLY from AuthContext.user.role.
+  const [userRole, setUserRole] = useState<UserRole>(() => mapAuthRoleToUserRole(user?.role ?? ""));
+
+  useEffect(() => {
+    const mappedRole = mapAuthRoleToUserRole(user?.role ?? "");
+    // Temporary development-only debug log
+    console.log("Permissions userRole:", mappedRole);
+    setUserRole(mappedRole);
+  }, [user?.role]);
 
   const hasPermission = useCallback(
     (perm: Permission) => {
