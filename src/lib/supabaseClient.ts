@@ -7,8 +7,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Supabase environment variables are not set.');
 }
 
+// Persist sessions client-side so auth state survives reloads.
+// Service-role key must remain server-only and never be checked into the repo.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false,
+    persistSession: true,
   },
 });
