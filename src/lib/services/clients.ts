@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase";
 import type { Client } from "@/types";
 
 export async function fetchClients(): Promise<{ data: Client[] | null; error: any }>{

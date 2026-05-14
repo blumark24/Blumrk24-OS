@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabase";
 import type { Task } from "@/types";
 
 export async function fetchTasks(): Promise<{ data: Task[] | null; error: any }>{
