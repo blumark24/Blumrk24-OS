@@ -34,13 +34,15 @@ export type Permission =
   | "manage_settings"
   | "manage_automations";
 
-export const ROLE_LABELS: Record<UserRole, string> = {
-  super_admin:      "مدير أعلى",
-  board_member:     "عضو مجلس الإدارة",
-  defense_manager:  "مدير وكالة الدفاع",
-  attack_manager:   "مدير وكالة الهجوم",
-  finance_manager:  "مدير مالي",
-  employee:         "موظف",
+export const ROLE_LABELS: Record<string, string> = {
+  super_admin: "مدير أعلى",
+  admin: "مدير",
+  manager: "مدير قسم",
+  board_member: "عضو مجلس الإدارة",
+  defense_manager: "مدير وكالة الدفاع",
+  attack_manager: "مدير وكالة الهجوم",
+  finance_manager: "مدير مالي",
+  employee: "موظف",
 };
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -112,17 +114,30 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 };
 
 export function mapAuthRoleToUserRole(role: string): UserRole {
-  switch (role) {
+  const normalizedRole = String(role ?? "").trim();
+
+  switch (normalizedRole) {
+    case "super_admin":
     case "مدير_عام":
-    case "super_admin":      return "super_admin";
+      return "super_admin";
+    case "admin":
+      return "super_admin";
+    case "manager":
+    case "مدير_قسم":
+      return "defense_manager";
+    case "finance_manager":
     case "مدير_مالي":
-    case "finance_manager":  return "finance_manager";
+      return "finance_manager";
+    case "attack_manager":
     case "مدير_مبيعات":
-    case "attack_manager":   return "attack_manager";
+      return "attack_manager";
+    case "defense_manager":
     case "مدير":
-    case "defense_manager":  return "defense_manager";
-    case "board_member":     return "board_member";
-    default:                 return "employee";
+      return "defense_manager";
+    case "board_member":
+      return "board_member";
+    default:
+      return "employee";
   }
 }
 
