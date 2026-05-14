@@ -17,7 +17,7 @@ import { supabase } from "@/lib/supabase";
 import { timeAgo } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
-// ─── Search ───────────────────────────────────────────────────────────────────
+// ─── Search ──────────────────────────────────────────────────────────��[...]
 
 interface SearchResult {
   id: string;
@@ -60,7 +60,7 @@ const NOTIF_ICONS = {
   invoice_due:    { icon: DollarSign,    color: "text-orange-400",bg: "bg-orange-500/10"},
 };
 
-// ─── Quick-create items ───────────────────────────────────────────────────────
+// ─── Quick-create items ──────────────────────────────────────────────────────��[...]
 
 const QUICK_CREATE = [
   { label: "عميل جديد",   icon: UserCircle,  href: "/clients",   color: "#10b981" },
@@ -70,7 +70,7 @@ const QUICK_CREATE = [
   { label: "موظف جديد",   icon: Users,       href: "/employees", color: "#a855f7" },
 ];
 
-// ─── Profile Dropdown ─────────────────────────────────────────────────────────
+// ─── Profile Dropdown ───────────────────────────────────────────────────────�[...]
 
 interface ProfileDropdownProps {
   user: { id: string; name: string; email: string; role: string; avatar?: string } | null;
@@ -193,12 +193,16 @@ function ProfileDropdown({ user, userRole, managedUsers, onLogout, onNavigate, o
   );
 }
 
-// ─── Header ───────────────────────────────────────────────────────────────────
+// ─── Header ──────────────────────────────────────────────────────────�[...]
 
 export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const { userRole, managedUsers } = usePermissions();
+
+  // Temporary development-only debug log
+  console.log("Header userRole:", userRole);
+
   const toast = useToast();
   const { notifications, unread: unreadNotif, markRead, markAllRead } = useNotifications();
   const { messages, unread: unreadMsg, markRead: markMsgRead, markAllRead: markAllMsgRead } = useMessages();
@@ -369,7 +373,7 @@ export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: ()
                     <button
                       key={n.id}
                       onClick={() => { markRead(n.id); goTo(n.href); }}
-                      className={cn("w-full flex items-start gap-3 px-4 py-3 hover:bg-[#1a3356]/60 transition-colors text-right border-b border-[#1e3a5f]/40 last:border-0", !n.read && "bg-[#1a3356]/30")}
+                      className={cn("w-full flex items-start gap-3 px-4 py-3 hover:bg-[#1a3356]/60 transition-colors text-right border-b border-[#1e3a5f]/40 last:border-0", !n.read && "bg-[#1a335[...]
                     >
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${cfg.bg}`}>
                         <cfg.icon size={14} className={cfg.color} />
@@ -418,9 +422,9 @@ export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: ()
                   <button
                     key={m.id}
                     onClick={() => markMsgRead(m.id)}
-                    className={cn("w-full flex items-start gap-3 px-4 py-3 hover:bg-[#1a3356]/60 transition-colors text-right border-b border-[#1e3a5f]/40 last:border-0", !m.read && "bg-[#1a3356]/30")}
+                    className={cn("w-full flex items-start gap-3 px-4 py-3 hover:bg-[#1e3356]/60 transition-colors text-right border-b border-[#1e3a5f]/40 last:border-0", !m.read && "bg-[#1e3356][...]
                   >
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold text-white" style={{ background: "linear-gradient(135deg,#1e6fd9,#22d3ee)" }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold text-white" style={{ background: "linear-gradient(135deg,#1e6fd9,#22d3ee)[...]
                       {m.avatar}
                     </div>
                     <div className="flex-1 min-w-0">
