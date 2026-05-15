@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import JellyfishBackground from "@/components/jellyfish/JellyfishBackground";
-import { Eye, EyeOff, LogIn } from "lucide-react";
+import { Eye, EyeOff, LogIn, Mail, ArrowRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import { supabase } from "@/lib/supabase";
 
 export default function AuthPage() {
   const { login } = useAuth();
@@ -15,6 +16,13 @@ export default function AuthPage() {
   const [showPw,   setShowPw]   = useState(false);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
+
+  // Forgot-password state
+  const [showForgot,   setShowForgot]   = useState(false);
+  const [resetEmail,   setResetEmail]   = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMsg,     setResetMsg]     = useState("");
+  const [resetErr,     setResetErr]     = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +35,28 @@ export default function AuthPage() {
       toast.error(result.error ?? "خطأ في تسجيل الدخول");
     } else {
       toast.success("مرحباً! تم تسجيل الدخول بنجاح");
+    }
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetErr("");
+    setResetMsg("");
+    if (!resetEmail.trim()) {
+      setResetErr("يرجى إدخال بريدك الإلكتروني");
+      return;
+    }
+    setResetLoading(true);
+    const redirectTo = `${window.location.origin}/auth/reset-password`;
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      resetEmail.trim().toLowerCase(),
+      { redirectTo }
+    );
+    setResetLoading(false);
+    if (resetError) {
+      setResetErr("تعذر إرسال رابط الاسترداد. تحقق من البريد الإلكتروني وحاول مجدداً.");
+    } else {
+      setResetMsg("تم الإرسال! تحقق من بريدك الإلكتروني للحصول على رابط إعادة التعيين.");
     }
   };
 
@@ -62,61 +92,135 @@ export default function AuthPage() {
 
         {/* Card */}
         <div className="glass-card p-8">
-          <h2 className="text-white font-heading font-bold text-xl mb-6 text-center">تسجيل الدخول</h2>
+          {!showForgot ? (
+            <>
+              <h2 className="text-white font-heading font-bold text-xl mb-6 text-center">تسجيل الدخول</h2>
 
-          {error && (
-            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm text-center">
-              {error}
-            </div>
-          )}
+              {error && (
+                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm text-center">
+                  {error}
+                </div>
+              )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm text-[#8ba3c7] mb-1.5">البريد الإلكتروني</label>
-              <input
-                type="email"
-                className="input-dark"
-                placeholder="admin@blumark24.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-[#8ba3c7] mb-1.5">كلمة المرور</label>
-              <div className="relative">
-                <input
-                  type={showPw ? "text" : "password"}
-                  className="input-dark pl-10"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-[#8ba3c7] mb-1.5">البريد الإلكتروني</label>
+                  <input
+                    type="email"
+                    className="input-dark"
+                    placeholder="admin@blumark24.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-[#8ba3c7] mb-1.5">كلمة المرور</label>
+                  <div className="relative">
+                    <input
+                      type={showPw ? "text" : "password"}
+                      className="input-dark pl-10"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPw(!showPw)}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors"
+                    >
+                      {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn-primary w-full flex items-center justify-center gap-2 py-3 text-base disabled:opacity-50"
+                >
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <><LogIn size={18} /><span>تسجيل الدخول</span></>
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-4 text-center">
                 <button
                   type="button"
-                  onClick={() => setShowPw(!showPw)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors"
+                  onClick={() => { setShowForgot(true); setResetEmail(email); setResetMsg(""); setResetErr(""); }}
+                  className="text-sm text-[#8ba3c7] hover:text-[#22d3ee] transition-colors"
                 >
-                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  نسيت كلمة المرور؟
                 </button>
               </div>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full flex items-center justify-center gap-2 py-3 text-base disabled:opacity-50"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-6">
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(false)}
+                  className="text-[#8ba3c7] hover:text-[#22d3ee] transition-colors"
+                >
+                  <ArrowRight size={18} />
+                </button>
+                <h2 className="text-white font-heading font-bold text-xl">استرداد كلمة المرور</h2>
+              </div>
+
+              {resetMsg ? (
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm text-center space-y-3">
+                  <Mail size={24} className="mx-auto" />
+                  <p>{resetMsg}</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgot(false)}
+                    className="text-xs text-[#8ba3c7] hover:text-[#22d3ee] transition-colors"
+                  >
+                    العودة لتسجيل الدخول
+                  </button>
+                </div>
               ) : (
                 <>
-                  <LogIn size={18} />
-                  <span>تسجيل الدخول</span>
+                  <p className="text-[#8ba3c7] text-sm mb-4">
+                    أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور.
+                  </p>
+
+                  {resetErr && (
+                    <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm text-center">
+                      {resetErr}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleForgot} className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-[#8ba3c7] mb-1.5">البريد الإلكتروني</label>
+                      <input
+                        type="email"
+                        className="input-dark"
+                        placeholder="admin@blumark24.com"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={resetLoading}
+                      className="btn-primary w-full flex items-center justify-center gap-2 py-3 text-base disabled:opacity-50"
+                    >
+                      {resetLoading
+                        ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        : <><Mail size={17} /><span>إرسال رابط الاسترداد</span></>
+                      }
+                    </button>
+                  </form>
                 </>
               )}
-            </button>
-          </form>
+            </>
+          )}
         </div>
 
         {/* Feature bullets */}
