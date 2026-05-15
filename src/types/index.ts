@@ -1,4 +1,15 @@
-export type UserRole = "مدير_عام" | "مدير_مالي" | "مدير_مبيعات" | "مدير" | "موظف";
+export type UserRole =
+  | "super_admin"
+  | "board_member"
+  | "owner"
+  | "general_manager"
+  | "defense_manager"
+  | "attack_manager"
+  | "manager"
+  | "finance_manager"
+  | "sales_manager"
+  | "hr_manager"
+  | "employee";
 
 export interface User {
   id: string;

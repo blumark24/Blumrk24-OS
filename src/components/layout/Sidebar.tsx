@@ -10,7 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
-import { usePermissions, Permission } from "@/contexts/PermissionsContext";
+import { usePermissions, Permission, ROLE_LABELS } from "@/contexts/PermissionsContext";
 
 // ─── Nav items ─────────────────────────────────────────────────────────────────
 
@@ -159,7 +159,7 @@ export default function Sidebar({
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-white truncate">{user?.name ?? "المستخدم"}</div>
-              <div className="text-xs text-[#8ba3c7] truncate">{userRole.replace(/_/g, " ")}</div>
+              <div className="text-xs text-[#8ba3c7] truncate">{ROLE_LABELS[userRole] ?? userRole.replace(/_/g, " ")}</div>
             </div>
           )}
           {!collapsed && (
