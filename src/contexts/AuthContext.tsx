@@ -50,21 +50,27 @@ function setSessionCookie(value: string) {
 async function buildUser(id: string, email: string): Promise<AuthUser> {
   type ProfileRow = { name?: string | null; role?: string | null; avatar?: string | null; avatar_url?: string | null; email?: string | null; force_password_change?: boolean | null };
 
-  // FULL_COLS includes avatar_url (added by migration 006).
-  // If that column does not yet exist the query returns an error and we fall
-  // back to SAFE_COLS automatically — no silent data loss.
+  // FULL_COLS — includes columns added by migrations 005 (force_password_change)
+  // and 006 (avatar_url). Falls back to SAFE_COLS when those columns are absent.
+  // SAFE_COLS — only the four columns that exist in the original base schema and
+  // are therefore guaranteed to be present regardless of which migrations have run.
+  // Keeping SAFE_COLS free of optional columns ensures the fallback can never
+  // itself fail due to a missing column, which was the root cause of the
+  // "always returns employee" bug when migration 005 was not yet applied.
   const FULL_COLS = "name, role, avatar, avatar_url, email, force_password_change";
-  const SAFE_COLS = "name, role, avatar, email, force_password_change";
+  const SAFE_COLS = "name, role, avatar, email";
 
   async function queryEmail(cols: string): Promise<ProfileRow | null> {
     const e = (email || "").trim().toLowerCase();
     if (!e) return null;
     const { data, error } = await supabase.from("profiles").select(cols).ilike("email", e).maybeSingle();
+    if (error) console.warn("[buildUser] queryEmail error:", error.message, "cols:", cols);
     return error ? null : ((data as ProfileRow) ?? null);
   }
 
   async function queryId(cols: string): Promise<ProfileRow | null> {
     const { data, error } = await supabase.from("profiles").select(cols).eq("id", id).maybeSingle();
+    if (error) console.warn("[buildUser] queryId error:", error.message, "cols:", cols);
     return error ? null : ((data as ProfileRow) ?? null);
   }
 
