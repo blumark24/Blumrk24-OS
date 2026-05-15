@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import JellyfishBackground from "@/components/jellyfish/JellyfishBackground";
-import { Eye, EyeOff, LogIn } from "lucide-react";
+import { Eye, EyeOff, LogIn, Send } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import { supabase } from "@/lib/supabase";
 
 export default function AuthPage() {
   const { login } = useAuth();
@@ -15,6 +16,12 @@ export default function AuthPage() {
   const [showPw,   setShowPw]   = useState(false);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
+
+  const [mode,      setMode]      = useState<"login" | "forgot">("login");
+  const [fpEmail,   setFpEmail]   = useState("");
+  const [fpLoading, setFpLoading] = useState(false);
+  const [fpSuccess, setFpSuccess] = useState(false);
+  const [fpError,   setFpError]   = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +35,30 @@ export default function AuthPage() {
     } else {
       toast.success("مرحباً! تم تسجيل الدخول بنجاح");
     }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFpError("");
+    setFpLoading(true);
+    const { error: fpErr } = await supabase.auth.resetPasswordForEmail(
+      fpEmail.trim().toLowerCase(),
+      { redirectTo: `${window.location.origin}/auth/reset-password` }
+    );
+    setFpLoading(false);
+    if (fpErr) {
+      setFpError("حدث خطأ. يرجى المحاولة مرة أخرى.");
+    } else {
+      setFpSuccess(true);
+    }
+  };
+
+  const openForgot = () => {
+    setMode("forgot");
+    setError("");
+    setFpSuccess(false);
+    setFpError("");
+    setFpEmail("");
   };
 
   return (
@@ -62,61 +93,143 @@ export default function AuthPage() {
 
         {/* Card */}
         <div className="glass-card p-8">
-          <h2 className="text-white font-heading font-bold text-xl mb-6 text-center">تسجيل الدخول</h2>
+          {mode === "login" ? (
+            <>
+              <h2 className="text-white font-heading font-bold text-xl mb-6 text-center">تسجيل الدخول</h2>
 
-          {error && (
-            <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm text-center">
-              {error}
-            </div>
-          )}
+              {error && (
+                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm text-center">
+                  {error}
+                </div>
+              )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm text-[#8ba3c7] mb-1.5">البريد الإلكتروني</label>
-              <input
-                type="email"
-                className="input-dark"
-                placeholder="admin@blumark24.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-[#8ba3c7] mb-1.5">كلمة المرور</label>
-              <div className="relative">
-                <input
-                  type={showPw ? "text" : "password"}
-                  className="input-dark pl-10"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm text-[#8ba3c7] mb-1.5">البريد الإلكتروني</label>
+                  <input
+                    type="email"
+                    className="input-dark"
+                    placeholder="admin@blumark24.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-[#8ba3c7] mb-1.5">كلمة المرور</label>
+                  <div className="relative">
+                    <input
+                      type={showPw ? "text" : "password"}
+                      className="input-dark pl-10"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPw(!showPw)}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors"
+                    >
+                      {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <div className="text-right mt-1.5">
+                    <button
+                      type="button"
+                      onClick={openForgot}
+                      className="text-xs text-[#22d3ee]/60 hover:text-[#22d3ee] transition-colors hover:underline"
+                      style={{ textShadow: "none" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.textShadow = "0 0 8px rgba(34,211,238,0.4)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.textShadow = "none")}
+                    >
+                      نسيت كلمة المرور؟
+                    </button>
+                  </div>
+                </div>
                 <button
-                  type="button"
-                  onClick={() => setShowPw(!showPw)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors"
+                  type="submit"
+                  disabled={loading}
+                  className="btn-primary w-full flex items-center justify-center gap-2 py-3 text-base disabled:opacity-50"
                 >
-                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <LogIn size={18} />
+                      <span>تسجيل الدخول</span>
+                    </>
+                  )}
                 </button>
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full flex items-center justify-center gap-2 py-3 text-base disabled:opacity-50"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              </form>
+            </>
+          ) : (
+            <>
+              <h2 className="text-white font-heading font-bold text-xl mb-2 text-center">
+                نسيت كلمة المرور؟
+              </h2>
+              <p className="text-[#8ba3c7] text-sm text-center mb-6">
+                أدخل بريدك الإلكتروني لإرسال رابط إعادة تعيين كلمة المرور
+              </p>
+
+              {fpSuccess ? (
+                <div className="text-center space-y-4 py-2">
+                  <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
+                    تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMode("login")}
+                    className="text-sm text-[#22d3ee]/70 hover:text-[#22d3ee] transition-colors hover:underline"
+                  >
+                    العودة لتسجيل الدخول
+                  </button>
+                </div>
               ) : (
                 <>
-                  <LogIn size={18} />
-                  <span>تسجيل الدخول</span>
+                  {fpError && (
+                    <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm text-center">
+                      {fpError}
+                    </div>
+                  )}
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div>
+                      <label className="block text-sm text-[#8ba3c7] mb-1.5">البريد الإلكتروني</label>
+                      <input
+                        type="email"
+                        className="input-dark"
+                        placeholder="admin@blumark24.com"
+                        value={fpEmail}
+                        onChange={(e) => setFpEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={fpLoading}
+                      className="btn-primary w-full flex items-center justify-center gap-2 py-3 text-base disabled:opacity-50"
+                    >
+                      {fpLoading ? (
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <Send size={18} />
+                          <span>إرسال رابط إعادة التعيين</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode("login")}
+                      className="w-full text-sm text-[#8ba3c7] hover:text-[#22d3ee] transition-colors text-center pt-1"
+                    >
+                      العودة لتسجيل الدخول
+                    </button>
+                  </form>
                 </>
               )}
-            </button>
-          </form>
+            </>
+          )}
         </div>
 
         {/* Feature bullets */}

@@ -147,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (loading) return;
 
     const isPublic = PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
-    const isAuthPage = pathname.startsWith("/auth");
+    const isAuthPage = pathname === "/auth";
 
     if (!user && !isPublic) {
       router.replace(`/auth?redirect=${encodeURIComponent(pathname)}`);
