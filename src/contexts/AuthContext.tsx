@@ -47,25 +47,26 @@ function setSessionCookie(value: string) {
 async function buildUser(id: string, email: string): Promise<AuthUser> {
   let profile: { name?: string | null; full_name?: string | null; role?: string | null; avatar?: string | null; avatar_url?: string | null; email?: string | null } | null = null;
 
-  // 1) Try by auth user id (authoritative)
-  const { data: byId } = await supabase
-    .from("profiles")
-    .select("name, full_name, role, avatar, avatar_url, email")
-    .eq("id", id)
-    .maybeSingle();
-  profile = byId ?? null;
+  const normalizedEmail = (email || "").trim().toLowerCase();
 
-  // 2) If not found by id, try by email (case-insensitive)
+  // 1) Try by email first (prevents stale id-matched rows from overriding correct role)
+  if (normalizedEmail) {
+    const { data: byEmail } = await supabase
+      .from("profiles")
+      .select("name, full_name, role, avatar, avatar_url, email")
+      .ilike("email", normalizedEmail)
+      .maybeSingle();
+    profile = byEmail ?? null;
+  }
+
+  // 2) If not found by email, try by auth user id
   if (!profile) {
-    const e = (email || "").trim().toLowerCase();
-    if (e) {
-      const { data: byEmail } = await supabase
-        .from("profiles")
-        .select("name, full_name, role, avatar, avatar_url, email")
-        .ilike("email", e)
-        .maybeSingle();
-      profile = byEmail ?? null;
-    }
+    const { data: byId } = await supabase
+      .from("profiles")
+      .select("name, full_name, role, avatar, avatar_url, email")
+      .eq("id", id)
+      .maybeSingle();
+    profile = byId ?? null;
   }
 
   // 3) If still not found, create a safe profile for new users
