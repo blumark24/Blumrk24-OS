@@ -201,12 +201,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearForcePasswordChange = useCallback(async () => {
     if (!user) return;
-    const normalizedEmail = user.email.trim().toLowerCase();
     try {
-      await supabase
-        .from("profiles")
-        .update({ force_password_change: false })
-        .ilike("email", normalizedEmail);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await fetch("/api/auth/clear-force-pw", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+      }
     } catch { /* ignore — local state cleared regardless */ }
     setUser((prev) => (prev ? { ...prev, forcePasswordChange: false } : null));
   }, [user]);
