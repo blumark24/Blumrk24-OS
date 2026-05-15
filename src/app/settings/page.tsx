@@ -7,7 +7,7 @@ import Link from "next/link";
 import {
   Settings, Users, Shield, Building2, Palette, Link2, Bell, Save,
   Check, Zap, ExternalLink, Clock, ToggleLeft, ToggleRight,
-  Plus, Pencil, UserX, UserCheck, X, Key, Loader2,
+  Plus, Pencil, UserX, UserCheck, X, Key, Loader2, Lock, Eye, EyeOff,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -25,11 +25,14 @@ import { useToast } from "@/contexts/ToastContext";
 import { getSystemSettings, setSystemSetting } from "@/lib/db";
 import { useAutomations } from "@/hooks/useData";
 import { withTimeout } from "@/lib/asyncHelpers";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
   { id: "general",      label: "عام",              icon: Building2 },
+  { id: "account",      label: "الحساب",            icon: Lock      },
   { id: "users",        label: "المستخدمون",        icon: Users     },
   { id: "permissions",  label: "الصلاحيات والأدوار",icon: Shield    },
   { id: "integrations", label: "التكاملات",         icon: Link2     },
@@ -279,6 +282,7 @@ function PermissionsTab() {
 function SettingsContent() {
   const toast = useToast();
   const { hasPermission } = usePermissions();
+  const { user } = useAuth();
 
   const [activeTab,  setActiveTab]  = useState("general");
   const [saved,      setSaved]      = useState(false);
@@ -294,6 +298,15 @@ function SettingsContent() {
 
   // Real automation data from DB
   const { data: automationsDB, toggle: toggleAutomation } = useAutomations();
+
+  // ── Change password ──
+  const [pwForm,       setPwForm]       = useState({ current: "", newPw: "", confirm: "" });
+  const [pwLoading,    setPwLoading]    = useState(false);
+  const [pwError,      setPwError]      = useState("");
+  const [pwSuccess,    setPwSuccess]    = useState(false);
+  const [showCurrPw,   setShowCurrPw]   = useState(false);
+  const [showNewPw,    setShowNewPw]    = useState(false);
+  const [showConfirmPw,setShowConfirmPw]= useState(false);
 
   // Load settings from Supabase on mount
   useEffect(() => {
@@ -352,6 +365,51 @@ function SettingsContent() {
     }
   };
 
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError("");
+    setPwSuccess(false);
+
+    if (!pwForm.current) {
+      setPwError("كلمة المرور الحالية مطلوبة");
+      return;
+    }
+    if (pwForm.newPw.length < 8) {
+      setPwError("كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل");
+      return;
+    }
+    if (pwForm.newPw !== pwForm.confirm) {
+      setPwError("كلمتا المرور الجديدة غير متطابقتين");
+      return;
+    }
+
+    setPwLoading(true);
+    try {
+      // Re-authenticate to verify the current password
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user?.email ?? "",
+        password: pwForm.current,
+      });
+      if (signInErr) {
+        setPwError("كلمة المرور الحالية غير صحيحة");
+        return;
+      }
+      // Update to the new password
+      const { error: updateErr } = await supabase.auth.updateUser({ password: pwForm.newPw });
+      if (updateErr) {
+        setPwError("حدث خطأ أثناء تحديث كلمة المرور. يرجى المحاولة مرة أخرى.");
+        return;
+      }
+      setPwSuccess(true);
+      setPwForm({ current: "", newPw: "", confirm: "" });
+      toast.success("تم تحديث كلمة المرور بنجاح");
+    } catch {
+      setPwError("حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.");
+    } finally {
+      setPwLoading(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -363,7 +421,7 @@ function SettingsContent() {
             </h1>
             <p className="text-[#8ba3c7] text-sm mt-1">إدارة إعدادات النظام والتفضيلات</p>
           </div>
-          {activeTab !== "permissions" && (
+          {activeTab !== "permissions" && activeTab !== "account" && (
             <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2 disabled:opacity-50">
               {saving
                 ? <Loader2 size={16} className="animate-spin" />
@@ -415,6 +473,114 @@ function SettingsContent() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* ── Account ── */}
+            {activeTab === "account" && (
+              <div className="glass-card p-6 space-y-5">
+                <div className="flex items-center gap-2">
+                  <Lock size={18} className="text-[#22d3ee]" />
+                  <h3 className="text-white font-medium text-lg">تغيير كلمة المرور</h3>
+                </div>
+
+                {/* Current user info */}
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-[#0d1f3c]/60 border border-[#1e3a5f]">
+                  <div className="w-10 h-10 rounded-full bg-[#22d3ee]/10 flex items-center justify-center flex-shrink-0">
+                    <Lock size={16} className="text-[#22d3ee]" />
+                  </div>
+                  <div>
+                    <div className="text-white text-sm font-medium">{user?.name}</div>
+                    <div className="text-xs text-[#8ba3c7]">{user?.email}</div>
+                  </div>
+                </div>
+
+                {pwSuccess && (
+                  <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
+                    تم تحديث كلمة المرور بنجاح ✓
+                  </div>
+                )}
+                {pwError && (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                    {pwError}
+                  </div>
+                )}
+
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  <div>
+                    <label className="block text-xs text-[#8ba3c7] mb-1.5">كلمة المرور الحالية</label>
+                    <div className="relative">
+                      <input
+                        type={showCurrPw ? "text" : "password"}
+                        className="input-dark text-sm pl-10"
+                        placeholder="••••••••"
+                        value={pwForm.current}
+                        onChange={(e) => { setPwForm((f) => ({ ...f, current: e.target.value })); setPwError(""); setPwSuccess(false); }}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrPw(!showCurrPw)}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors"
+                      >
+                        {showCurrPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-[#8ba3c7] mb-1.5">كلمة المرور الجديدة</label>
+                    <div className="relative">
+                      <input
+                        type={showNewPw ? "text" : "password"}
+                        className="input-dark text-sm pl-10"
+                        placeholder="••••••••"
+                        value={pwForm.newPw}
+                        onChange={(e) => { setPwForm((f) => ({ ...f, newPw: e.target.value })); setPwError(""); setPwSuccess(false); }}
+                        required
+                        minLength={8}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPw(!showNewPw)}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors"
+                      >
+                        {showNewPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-[#4a6a99] mt-1">8 أحرف على الأقل</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-[#8ba3c7] mb-1.5">تأكيد كلمة المرور الجديدة</label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPw ? "text" : "password"}
+                        className="input-dark text-sm pl-10"
+                        placeholder="••••••••"
+                        value={pwForm.confirm}
+                        onChange={(e) => { setPwForm((f) => ({ ...f, confirm: e.target.value })); setPwError(""); setPwSuccess(false); }}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPw(!showConfirmPw)}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors"
+                      >
+                        {showConfirmPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={pwLoading}
+                    className="btn-primary flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {pwLoading ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
+                    {pwLoading ? "جارٍ التحديث..." : "تحديث كلمة المرور"}
+                  </button>
+                </form>
               </div>
             )}
 
