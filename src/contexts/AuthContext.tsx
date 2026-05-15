@@ -48,10 +48,13 @@ function setSessionCookie(value: string) {
 }
 
 async function buildUser(id: string, email: string): Promise<AuthUser> {
-  type ProfileRow = { name?: string | null; full_name?: string | null; role?: string | null; avatar?: string | null; avatar_url?: string | null; email?: string | null; force_password_change?: boolean | null };
+  type ProfileRow = { name?: string | null; role?: string | null; avatar?: string | null; avatar_url?: string | null; email?: string | null; force_password_change?: boolean | null };
 
-  const FULL_COLS  = "name, full_name, role, avatar, avatar_url, email, force_password_change";
-  const SAFE_COLS  = "name, role, avatar, email, force_password_change";
+  // FULL_COLS includes avatar_url (added by migration 006).
+  // If that column does not yet exist the query returns an error and we fall
+  // back to SAFE_COLS automatically — no silent data loss.
+  const FULL_COLS = "name, role, avatar, avatar_url, email, force_password_change";
+  const SAFE_COLS = "name, role, avatar, email, force_password_change";
 
   async function queryEmail(cols: string): Promise<ProfileRow | null> {
     const e = (email || "").trim().toLowerCase();
@@ -75,34 +78,30 @@ async function buildUser(id: string, email: string): Promise<AuthUser> {
     profile = await queryId(FULL_COLS) ?? await queryId(SAFE_COLS);
   }
 
-  // 3) Not found — upsert a safe default
+  // 3) Profile genuinely missing — do NOT upsert from the browser.
+  //    Creating or modifying profiles must go through the server-side
+  //    /api/admin/create-user route so role defaults are controlled.
+  //    Return a minimal read-only object so the user can still see the UI
+  //    while an admin resolves the missing profile.
   if (!profile) {
-    const safeProfile = {
+    console.error("[buildUser] No profile row found for", email, id);
+    return {
       id,
       email,
       name: email.split("@")[0],
-      full_name: email.split("@")[0],
       role: "employee",
-      is_active: true,
-      department: "",
+      avatar: undefined,
+      forcePasswordChange: false,
     };
-    const { data: created } = await supabase
-      .from("profiles")
-      .upsert(safeProfile, { onConflict: "id" })
-      .select(SAFE_COLS)
-      .maybeSingle();
-    profile = created ?? safeProfile;
   }
-
-  const displayName = profile?.full_name ?? profile?.name ?? email.split("@")[0];
 
   return {
     id,
     email,
-    name: displayName,
-    role: profile?.role ?? "employee",
-    avatar: profile?.avatar_url ?? profile?.avatar ?? undefined,
-    forcePasswordChange: profile?.force_password_change === true,
+    name: profile.name ?? email.split("@")[0],
+    role: profile.role ?? "employee",
+    avatar: profile.avatar_url ?? profile.avatar ?? undefined,
+    forcePasswordChange: profile.force_password_change === true,
   };
 }
 
