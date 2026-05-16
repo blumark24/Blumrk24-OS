@@ -81,24 +81,12 @@ export default function Sidebar({
       style={{ background: "rgba(10,22,40,0.95)", backdropFilter: "blur(20px)" }}
     >
       {/* Logo */}
-      <div className="flex items-center px-3 py-4 border-b border-[#1e3a5f]">
-        {collapsed ? (
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: "linear-gradient(135deg,#22d3ee,#1e6fd9)" }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L3 7v10l9 5 9-5V7L12 2z" fill="white" fillOpacity="0.9"/>
-              <path d="M12 2v20M3 7l9 5 9-5" stroke="rgba(255,255,255,0.4)" strokeWidth="1"/>
-            </svg>
-          </div>
-        ) : (
-          <OfficialBlumarkLogo maxHeight={30} />
-        )}
+      <div className={cn("flex items-center border-b border-[#1e3a5f]", collapsed ? "justify-center px-2 py-4" : "px-3 py-4")}>
+        {!collapsed && <OfficialBlumarkLogo maxHeight={30} />}
         {/* Desktop collapse toggle */}
         <button
           onClick={onToggle}
-          className="mr-auto ms-2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors hidden lg:block"
+          className={cn("text-[#8ba3c7] hover:text-[#22d3ee] transition-colors hidden lg:block", !collapsed && "mr-auto ms-2")}
         >
           <ChevronLeft size={16} className={cn("transition-transform", collapsed && "rotate-180")} />
         </button>
@@ -106,7 +94,7 @@ export default function Sidebar({
         {onMobileClose && (
           <button
             onClick={onMobileClose}
-            className="mr-auto ms-2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors lg:hidden"
+            className={cn("text-[#8ba3c7] hover:text-[#22d3ee] transition-colors lg:hidden", !collapsed && "mr-auto ms-2")}
           >
             <X size={16} />
           </button>

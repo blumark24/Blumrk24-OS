@@ -4,58 +4,19 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-// ─── Logo SVG (used only in the dashboard preview mockup inside Hero) ─────────
 
-function LogoSvg({ className = "h-8 w-8" }: { className?: string }) {
+function OfficialLandingLogo({ maxH = 40 }: { maxH?: number }) {
   return (
-    <svg viewBox="0 0 40 40" className={className}>
-      <rect x="3" y="3" width="34" height="34" rx="8" fill="url(#blu-grad)" opacity="0.18" />
-      <rect x="3" y="3" width="34" height="34" rx="8" fill="none" stroke="url(#blu-grad)" strokeWidth="1.4" />
-      <path d="M14 12h7a4 4 0 0 1 0 8h-7Z" fill="url(#blu-grad)" opacity="0.95" />
-      <path d="M14 20h8a4 4 0 0 1 0 8h-8Z" fill="url(#blu-grad)" />
-      <circle cx="29" cy="13" r="2" fill="#FF7A3D" />
-    </svg>
-  );
-}
-
-// ─── Official landing header logo (full brand mark PNG) ────────────────────────
-// TODO: if image appears broken, ensure public/brand/blumark24-logo-official.png
-//       has been committed to the repository.
-
-function OfficialLandingLogo() {
-  return (
-    <span className="inline-flex items-center rounded-2xl bg-white/95 px-2.5 py-1 shadow-md">
-      <Image
-        src="/brand/blumark24-logo-official.png"
-        width={240}
-        height={96}
-        alt="Blumark24 Marketing Agency"
-        className="h-auto w-auto object-contain max-h-[36px] sm:max-h-[46px] max-w-[150px] sm:max-w-[220px]"
-        priority
-        unoptimized
-      />
-    </span>
-  );
-}
-
-// ─── Footer / internal logo (SVG icon + text) ──────────────────────────────────
-
-function LogoText() {
-  return (
-    <span className="inline-flex items-center gap-2.5" dir="ltr">
-      <Image
-        src="/brand/blumark24-logo.svg"
-        width={32}
-        height={32}
-        alt="Blumark24 OS"
-        className="object-contain w-8 h-8"
-        unoptimized
-      />
-      <span className="font-semibold text-white tracking-tight text-[15px] leading-none">
-        Blumark<span className="text-[#22D3EE]">24</span>
-        <span className="text-[#AAB7C7] font-normal ms-1.5 text-[12px]">OS</span>
-      </span>
-    </span>
+    <Image
+      src="/brand/blumark24-logo-official.png"
+      width={240}
+      height={96}
+      alt="Blumark24 Marketing Agency"
+      className="h-auto w-auto object-contain"
+      style={{ maxHeight: `${maxH}px`, maxWidth: `${maxH * 2.5}px` }}
+      priority
+      unoptimized
+    />
   );
 }
 
@@ -879,7 +840,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 sm:gap-10">
 
             <div className="lg:col-span-1">
-              <LogoText />
+              <OfficialLandingLogo maxH={32} />
               <p className="mt-4 text-[13.5px] text-[#AAB7C7] leading-relaxed">نظام إدارة الأعمال بالذكاء الاصطناعي للشركات السعودية. منصة عربية لتنظيم التشغيل ورفع الكفاءة من مكان واحد.</p>
             </div>
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import JellyfishBackground from "@/components/jellyfish/JellyfishBackground";
+import OfficialBlumarkLogo from "@/components/brand/OfficialBlumarkLogo";
 import { Eye, EyeOff, Lock, CheckCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -90,20 +91,9 @@ export default function ResetPasswordPage() {
       <div className="relative z-10 w-full max-w-md px-4">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-3 mb-4">
-            <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg glow-teal"
-              style={{ background: "linear-gradient(135deg,#22d3ee,#1e6fd9)" }}
-            >
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L3 7v10l9 5 9-5V7L12 2z" fill="white" fillOpacity="0.95" />
-                <path d="M12 2v20M3 7l9 5 9-5" stroke="rgba(255,255,255,0.35)" strokeWidth="1" />
-              </svg>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-heading font-bold text-white">Blumark24</div>
-              <div className="text-sm text-[#22d3ee] font-medium">OS – نظام إدارة الأعمال</div>
-            </div>
+          <div className="inline-flex flex-col items-center gap-3 mb-4">
+            <OfficialBlumarkLogo maxHeight={48} />
+            <div className="text-sm text-[#22d3ee] font-medium">OS – نظام إدارة الأعمال</div>
           </div>
         </div>
 
