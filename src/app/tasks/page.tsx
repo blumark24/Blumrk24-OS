@@ -184,76 +184,78 @@ function TasksContent() {
           <div className="text-center py-8 text-[#8ba3c7] text-sm">جارٍ تحميل المهام...</div>
         )}
 
-        {/* Kanban View */}
+        {/* Kanban View — scroll wrapper uses -mx/px trick to prevent shadow clip */}
         {!loading && view === "kanban" && (
-          <div className="flex gap-4 overflow-x-auto pb-4">
-            {STATUS_COLUMNS.map((col) => {
-              const colTasks = tasks.filter((t) => t.status === col.key);
-              return (
-                <div key={col.key} className="flex-shrink-0 w-64">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-3 h-3 rounded-full" style={{ background: col.color }} />
-                    <span className="text-sm font-medium text-white">{col.label}</span>
-                    <span className="badge text-xs" style={{ background: `${col.color}20`, color: col.color }}>
-                      {colTasks.length}
-                    </span>
-                  </div>
-                  <div className="space-y-3">
-                    {colTasks.map((task) => (
-                      <div key={task.id} className="glass-card glass-card-hover p-4">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h4 className="text-white text-sm font-medium leading-snug">{task.title}</h4>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <span className={`badge text-xs ${PRIORITY_CONFIG[task.priority].class}`}>
-                              {PRIORITY_CONFIG[task.priority].label}
-                            </span>
-                          </div>
-                        </div>
-                        {task.clientName && (
-                          <div className="text-xs text-[#8ba3c7] mb-2">👤 {task.clientName}</div>
-                        )}
-                        <div className="flex items-center justify-between mt-3">
-                          <div className="flex items-center gap-1 text-xs text-[#8ba3c7]">
-                            <Clock size={11} />
-                            <span>{task.dueDate}</span>
-                            {isOverdue(task.dueDate, task.status) && task.status !== "متأخرة" && (
-                              <AlertTriangle size={11} className="text-red-400 mr-1" />
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {isAdmin && (
-                              <>
-                                <button onClick={() => openEdit(task)} aria-label="تعديل المهمة" className="p-1 rounded text-[#8ba3c7] hover:text-[#22d3ee] transition-colors">
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                </button>
-                                <button onClick={() => handleDeleteTask(task.id, task.title)} aria-label="حذف المهمة" className="p-1 rounded text-[#8ba3c7] hover:text-red-400 transition-colors">
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
-                                </button>
-                              </>
-                            )}
-                            <div className="w-6 h-6 rounded-full bg-[#1e6fd9] flex items-center justify-center text-xs text-white">
-                              {task.assigneeName.slice(0, 1)}
+          <div className="overflow-x-auto pb-6 -mx-1 px-1">
+            <div className="flex gap-3 sm:gap-4" style={{ minWidth: "max-content" }}>
+              {STATUS_COLUMNS.map((col) => {
+                const colTasks = tasks.filter((t) => t.status === col.key);
+                return (
+                  <div key={col.key} className="w-[240px] sm:w-[260px] shrink-0 flex flex-col">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-3 h-3 rounded-full" style={{ background: col.color }} />
+                      <span className="text-sm font-medium text-white">{col.label}</span>
+                      <span className="badge text-xs" style={{ background: `${col.color}20`, color: col.color }}>
+                        {colTasks.length}
+                      </span>
+                    </div>
+                    <div className="space-y-3 flex-1">
+                      {colTasks.map((task) => (
+                        <div key={task.id} className="glass-card glass-card-hover p-4">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <h4 className="text-white text-sm font-medium leading-snug">{task.title}</h4>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <span className={`badge text-xs ${PRIORITY_CONFIG[task.priority].class}`}>
+                                {PRIORITY_CONFIG[task.priority].label}
+                              </span>
                             </div>
                           </div>
+                          {task.clientName && (
+                            <div className="text-xs text-[#8ba3c7] mb-2">👤 {task.clientName}</div>
+                          )}
+                          <div className="flex items-center justify-between mt-3">
+                            <div className="flex items-center gap-1 text-xs text-[#8ba3c7]">
+                              <Clock size={11} />
+                              <span>{task.dueDate}</span>
+                              {isOverdue(task.dueDate, task.status) && task.status !== "متأخرة" && (
+                                <AlertTriangle size={11} className="text-red-400 mr-1" />
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {isAdmin && (
+                                <>
+                                  <button onClick={() => openEdit(task)} aria-label="تعديل المهمة" className="p-1 rounded text-[#8ba3c7] hover:text-[#22d3ee] transition-colors">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                  </button>
+                                  <button onClick={() => handleDeleteTask(task.id, task.title)} aria-label="حذف المهمة" className="p-1 rounded text-[#8ba3c7] hover:text-red-400 transition-colors">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                                  </button>
+                                </>
+                              )}
+                              <div className="w-6 h-6 rounded-full bg-[#1e6fd9] flex items-center justify-center text-xs text-white">
+                                {task.assigneeName.slice(0, 1)}
+                              </div>
+                            </div>
+                          </div>
+                          <select
+                            className="mt-2 w-full bg-[#0d1f3c] border border-[#1e3a5f] rounded-lg text-xs text-[#8ba3c7] px-2 py-1 outline-none"
+                            value={task.status}
+                            onChange={(e) => moveTask(task.id, e.target.value as TaskStatus)}
+                          >
+                            {STATUS_COLUMNS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                          </select>
                         </div>
-                        <select
-                          className="mt-2 w-full bg-[#0d1f3c] border border-[#1e3a5f] rounded-lg text-xs text-[#8ba3c7] px-2 py-1 outline-none"
-                          value={task.status}
-                          onChange={(e) => moveTask(task.id, e.target.value as TaskStatus)}
-                        >
-                          {STATUS_COLUMNS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                        </select>
-                      </div>
-                    ))}
-                    {colTasks.length === 0 && (
-                      <div className="glass-card p-4 text-center text-xs text-[#6b87ab] border-dashed border-[#1e3a5f]">
-                        لا توجد مهام
-                      </div>
-                    )}
+                      ))}
+                      {colTasks.length === 0 && (
+                        <div className="glass-card p-4 text-center text-xs text-[#6b87ab] border-dashed border-[#1e3a5f] min-h-[80px] flex items-center justify-center">
+                          لا توجد مهام
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
 
