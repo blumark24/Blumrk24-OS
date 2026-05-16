@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-// ─── Logo SVG ──────────────────────────────────────────────────────────────────
+// ─── Logo SVG (used only in the dashboard preview mockup inside Hero) ─────────
 
 function LogoSvg({ className = "h-8 w-8" }: { className?: string }) {
   return (
@@ -17,6 +17,28 @@ function LogoSvg({ className = "h-8 w-8" }: { className?: string }) {
     </svg>
   );
 }
+
+// ─── Official landing header logo (full brand mark PNG) ────────────────────────
+// TODO: if image appears broken, ensure public/brand/blumark24-logo-official.png
+//       has been committed to the repository.
+
+function OfficialLandingLogo() {
+  return (
+    <span className="inline-flex items-center rounded-2xl bg-white/95 px-2.5 py-1 shadow-md">
+      <Image
+        src="/brand/blumark24-logo-official.png"
+        width={240}
+        height={96}
+        alt="Blumark24 Marketing Agency"
+        className="h-auto w-auto object-contain max-h-[36px] sm:max-h-[46px] max-w-[150px] sm:max-w-[220px]"
+        priority
+        unoptimized
+      />
+    </span>
+  );
+}
+
+// ─── Footer / internal logo (SVG icon + text) ──────────────────────────────────
 
 function LogoText() {
   return (
@@ -86,12 +108,12 @@ export default function LandingPage() {
       </div>
 
       {/* ━━━━━━━━━━ HEADER ━━━━━━━━━━ */}
-      <header className="fixed inset-x-0 top-0 z-50 py-3 sm:py-4">
+      <header className="fixed inset-x-0 top-0 z-50 py-2 sm:py-3">
         <div className="mx-auto max-w-7xl px-2 sm:px-6">
-          <div className="flex items-center justify-between rounded-2xl border border-[rgba(34,211,238,0.16)] bg-[rgba(5,11,22,0.82)] backdrop-blur-2xl px-3 sm:px-5 h-16 min-w-0 overflow-hidden shadow-[0_4px_24px_-4px_rgba(0,0,0,0.5)]">
+          <div className="flex items-center justify-between rounded-2xl border border-[rgba(34,211,238,0.16)] bg-[rgba(5,11,22,0.82)] backdrop-blur-2xl px-3 sm:px-5 h-[64px] sm:h-[72px] min-w-0 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.5)]">
 
-            <a href="#" className="flex items-center" aria-label="Blumark24 OS">
-              <LogoText />
+            <a href="#" className="flex items-center flex-shrink-0" aria-label="Blumark24 Marketing Agency">
+              <OfficialLandingLogo />
             </a>
 
             <nav className="hidden lg:flex items-center gap-1">
@@ -137,7 +159,7 @@ export default function LandingPage() {
         />
         <div className="absolute inset-x-3 top-3 rounded-3xl border border-[rgba(34,211,238,0.24)] bg-[rgba(10,22,40,0.95)] backdrop-blur-2xl shadow-[0_20px_80px_-20px_rgba(0,0,0,0.7)]">
           <div className="flex items-center justify-between p-4 border-b border-white/5">
-            <LogoText />
+            <OfficialLandingLogo />
             <button
               onClick={() => { setMobileMenuOpen(false); document.body.style.overflow = ""; }}
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white"
@@ -185,7 +207,7 @@ export default function LandingPage() {
       <main>
 
         {/* ━━━━━━━━━━ HERO ━━━━━━━━━━ */}
-        <section id="home" className="relative pt-24 sm:pt-28 pb-4 sm:pb-8 overflow-hidden">
+        <section id="home" className="relative pt-[88px] sm:pt-[100px] pb-4 sm:pb-8 overflow-hidden">
           <div aria-hidden="true" className="absolute inset-0 -z-10">
             <div
               className="absolute inset-0 opacity-[0.18]"
