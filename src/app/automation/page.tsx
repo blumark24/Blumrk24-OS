@@ -275,6 +275,10 @@ function AutomationContent() {
               مركز الأتمتة
             </h1>
             <p className="text-[#8ba3c7] text-sm mt-1">تشغيل القواعد الآلية وإدارة سير العمل</p>
+            <p className="text-xs text-[#6b87ab] mt-0.5 flex items-center gap-1">
+              <Clock size={10} />
+              التشغيل المجدول غير مفعل في الخطة الحالية — يمكن التشغيل اليدوي فقط
+            </p>
           </div>
           <button onClick={runAll} disabled={!!runningId} className="btn-primary flex items-center gap-2 disabled:opacity-50">
             <Play size={15} />

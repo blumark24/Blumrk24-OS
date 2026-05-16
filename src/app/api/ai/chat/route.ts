@@ -6,6 +6,23 @@ export const dynamic = "force-dynamic";
 
 const TAG = "[ai/chat]";
 
+// Allowlist of valid Anthropic model IDs.  If ANTHROPIC_MODEL env var is set
+// to an unrecognised value we fall back to the default rather than crashing.
+const VALID_MODELS = new Set([
+  "claude-opus-4-7",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5-20251001",
+  "claude-haiku-4-5",
+]);
+const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
+
+function resolveModel(): string {
+  const env = (process.env.ANTHROPIC_MODEL ?? "").trim();
+  if (env && VALID_MODELS.has(env)) return env;
+  if (env) console.warn(`${TAG} ANTHROPIC_MODEL="${env}" is not in allowlist — using default`);
+  return DEFAULT_MODEL;
+}
+
 const SYSTEM_PROMPT = `أنت مساعد ذكي متخصص في إدارة الأعمال والموارد البشرية لشركة Blumark24.
 تتحدث باللغة العربية فقط وتقدم تحليلات دقيقة ومفيدة بناءً على بيانات الشركة الحقيقية.
 كن مختصراً وعملياً في إجاباتك. استخدم التنسيق بـ ** للنصوص المهمة والـ - لنقاط القوائم.`;
@@ -45,17 +62,23 @@ export async function POST(req: NextRequest) {
     ? `\n\n**بيانات الشركة الحالية:**\n- العملاء النشطون: ${kpi.activeClients}\n- معدل إتمام المهام: ${kpi.completedTasksPct}%\n- المهام غير المكتملة: ${kpi.incompleteTasks}\n- المهام المتأخرة: ${kpi.overdueTasks ?? 0}\n- صافي الربح: ${kpi.netProfit.toLocaleString("ar-SA")} ريال`
     : "";
 
+  const model  = resolveModel();
   const client = new Anthropic({ apiKey });
 
   try {
-    console.log(`${TAG} streaming request | msg_len=${userMessage.length}`);
+    console.log(`${TAG} streaming | model=${model} msg_len=${userMessage.length}`);
 
-    const stream = await client.messages.stream({
-      model:      "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
-      system:     SYSTEM_PROMPT + kpiContext,
-      messages:   [{ role: "user", content: userMessage }],
-    });
+    // Use the Node.js request abort signal so the Anthropic stream is cancelled
+    // when the client disconnects (e.g. user navigates away mid-stream).
+    const stream = await client.messages.stream(
+      {
+        model,
+        max_tokens: 1024,
+        system:     SYSTEM_PROMPT + kpiContext,
+        messages:   [{ role: "user", content: userMessage }],
+      },
+      { signal: req.signal },
+    );
 
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
@@ -69,6 +92,11 @@ export async function POST(req: NextRequest) {
               controller.enqueue(encoder.encode(chunk.delta.text));
             }
           }
+        } catch (streamErr) {
+          // AbortError means the client disconnected — not a bug
+          if (!(streamErr instanceof Error && streamErr.name === "AbortError")) {
+            console.error(`${TAG} stream error:`, streamErr);
+          }
         } finally {
           controller.close();
         }
@@ -77,17 +105,14 @@ export async function POST(req: NextRequest) {
 
     return new Response(readable, {
       headers: {
-        "Content-Type":  "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache",
+        "Content-Type":      "text/plain; charset=utf-8",
+        "Cache-Control":     "no-cache",
         "X-Accel-Buffering": "no",
       },
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`${TAG} Anthropic error: ${msg}`);
-    return NextResponse.json(
-      { error: "AI_ERROR", message: msg },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: "AI_ERROR", message: msg }, { status: 502 });
   }
 }

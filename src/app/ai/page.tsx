@@ -50,7 +50,9 @@ export default function AIPage() {
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [input, setInput]       = useState("");
   const [loading, setLoading]   = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const endRef    = useRef<HTMLDivElement>(null);
+  // AbortController for in-flight streaming request — cancelled on every new send
+  const abortRef  = useRef<AbortController | null>(null);
 
   const { kpi }                     = useDashboardKPI();
   const { data: tasks }             = useTasks();
@@ -82,6 +84,11 @@ export default function AIPage() {
     const content = text || input.trim();
     if (!content || loading) return;
 
+    // Cancel any previous in-flight request before starting a new one
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const userMsg: Message = { id: String(Date.now()), role: "user", content, timestamp: new Date() };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
@@ -94,6 +101,7 @@ export default function AIPage() {
       const res = await fetch("/api/ai/chat", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
+        signal:  controller.signal,
         body:    JSON.stringify({
           message: content,
           kpi: {
@@ -127,8 +135,13 @@ export default function AIPage() {
           }
         }
       }
-    } catch {
-      // Network error — fall through to local fallback below
+    } catch (err) {
+      // AbortError means the user sent a new message — silently discard
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setLoading(false);
+        return;
+      }
+      // Any other network error — fall through to local fallback
     }
 
     if (!streamed) {
