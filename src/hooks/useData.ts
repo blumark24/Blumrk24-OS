@@ -226,11 +226,13 @@ function useAsyncData<T>(fetcher: () => Promise<T>, fallback: T) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Refetch when a session becomes available (handles the case where RLS
-  // returns empty results because the component mounted before auth resolved)
+  // Refetch only when a new session is established (SIGNED_IN).
+  // Firing on every onAuthStateChange event (including TOKEN_REFRESHED,
+  // which Supabase emits ~hourly) would cause every active hook to re-query
+  // Supabase simultaneously — the root cause of the excessive parallel fetches.
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) load();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) load();
     });
     return () => subscription.unsubscribe();
   }, [load]);
