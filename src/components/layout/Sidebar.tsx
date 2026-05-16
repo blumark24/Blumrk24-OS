@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { usePermissions, Permission, ROLE_LABELS } from "@/contexts/PermissionsContext";
+import OfficialBlumarkLogo from "@/components/brand/OfficialBlumarkLogo";
 
 // ─── Nav items ─────────────────────────────────────────────────────────────────
 
@@ -80,26 +81,24 @@ export default function Sidebar({
       style={{ background: "rgba(10,22,40,0.95)", backdropFilter: "blur(20px)" }}
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-[#1e3a5f]">
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ background: "linear-gradient(135deg,#22d3ee,#1e6fd9)" }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L3 7v10l9 5 9-5V7L12 2z" fill="white" fillOpacity="0.9"/>
-            <path d="M12 2v20M3 7l9 5 9-5" stroke="rgba(255,255,255,0.4)" strokeWidth="1"/>
-          </svg>
-        </div>
-        {!collapsed && (
-          <div>
-            <div className="font-heading font-bold text-white text-base leading-none">Blumark24</div>
-            <div className="text-[10px] text-[#22d3ee] font-medium mt-0.5">OS</div>
+      <div className="flex items-center px-3 py-4 border-b border-[#1e3a5f]">
+        {collapsed ? (
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: "linear-gradient(135deg,#22d3ee,#1e6fd9)" }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L3 7v10l9 5 9-5V7L12 2z" fill="white" fillOpacity="0.9"/>
+              <path d="M12 2v20M3 7l9 5 9-5" stroke="rgba(255,255,255,0.4)" strokeWidth="1"/>
+            </svg>
           </div>
+        ) : (
+          <OfficialBlumarkLogo maxHeight={30} />
         )}
         {/* Desktop collapse toggle */}
         <button
           onClick={onToggle}
-          className="mr-auto text-[#8ba3c7] hover:text-[#22d3ee] transition-colors hidden lg:block"
+          className="mr-auto ms-2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors hidden lg:block"
         >
           <ChevronLeft size={16} className={cn("transition-transform", collapsed && "rotate-180")} />
         </button>
@@ -107,7 +106,7 @@ export default function Sidebar({
         {onMobileClose && (
           <button
             onClick={onMobileClose}
-            className="mr-auto text-[#8ba3c7] hover:text-[#22d3ee] transition-colors lg:hidden"
+            className="mr-auto ms-2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors lg:hidden"
           >
             <X size={16} />
           </button>
