@@ -122,6 +122,26 @@ export async function PATCH(req: NextRequest) {
     await admin.auth.admin.updateUserById(userId, { user_metadata: { name: cleanName } });
   }
 
+  // Sync the same fields to the employees table so the employees list
+  // stays consistent with the profiles table after a Settings-panel edit.
+  // Non-fatal: employee row may not exist for board members / admin-only accounts.
+  const employeeSync: Record<string, unknown> = {};
+  if (cleanName     !== undefined) employeeSync.name       = cleanName;
+  if (cleanRole     !== undefined) employeeSync.role       = cleanRole;
+  if (cleanDept     !== undefined) employeeSync.department = cleanDept;
+  if (cleanIsActive !== undefined) employeeSync.status     = cleanIsActive ? "نشط" : "غير_نشط";
+  if (Object.keys(employeeSync).length > 0) {
+    const { error: empError } = await admin
+      .from("employees")
+      .update(employeeSync)
+      .eq("id", userId);
+    if (empError) {
+      console.warn(`${TAG} employees sync skipped (non-fatal): ${empError.message}`);
+    } else {
+      console.log(`${TAG} step=syncEmployees ok`);
+    }
+  }
+
   console.log(`${TAG} SUCCESS | userId=${userId}`);
   return ok({ success: true });
 }

@@ -36,8 +36,12 @@ function buildAIResponse(
   return `بناءً على بيانات النظام الحالية، إليك التحليل المطلوب:\n\n📊 **الوضع العام:**\n- العملاء النشطين: ${kpi.activeClients} عميل\n- معدل إتمام المهام: ${kpi.completedTasksPct}%\n- صافي الربح: ${formatCurrency(kpi.netProfit)} SAR\n\n✅ **التوصيات:**\n1. ${kpi.incompleteTasks > 0 ? `معالجة ${kpi.incompleteTasks} مهمة غير مكتملة في أقرب وقت` : "جميع المهام مكتملة — أداء ممتاز"}\n2. تسريع المشاريع المتأخرة بتخصيص موارد إضافية\n3. زيادة التواصل مع العملاء النشطين لتحسين فرص التجديد\n\n🎯 **الأولويات الأسبوعية:**\n- ${kpi.incompleteTasks > 0 ? `إكمال ${Math.min(kpi.incompleteTasks, 3)} مهام عاجلة قبل نهاية الأسبوع` : "الحفاظ على الأداء الممتاز للمهام"}\n- جدولة اجتماعات متابعة مع العملاء الرئيسيين`;
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function formatContent(content: string) {
-  return content
+  return escapeHtml(content)
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\n/g, "<br/>");
 }
