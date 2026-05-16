@@ -87,12 +87,58 @@ export default function AIPage() {
     setInput("");
     setLoading(true);
 
-    await new Promise((r) => setTimeout(r, 900 + Math.random() * 600));
+    const assistantId = String(Date.now() + 1);
+    let streamed = false;
 
-    const aiResponse = buildAIResponse(kpi);
-    const assistantMsg: Message = { id: String(Date.now() + 1), role: "assistant", content: aiResponse, timestamp: new Date() };
-    setMessages((prev) => [...prev, assistantMsg]);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/ai/chat", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          message: content,
+          kpi: {
+            activeClients:      kpi.activeClients,
+            completedTasksPct:  kpi.completedTasksPct,
+            incompleteTasks:    kpi.incompleteTasks,
+            netProfit:          kpi.netProfit,
+            overdueTasks:       overdueTasks,
+          },
+        }),
+      });
+
+      if (res.ok && res.body) {
+        // Streaming path
+        const assistantMsg: Message = { id: assistantId, role: "assistant", content: "", timestamp: new Date() };
+        setMessages((prev) => [...prev, assistantMsg]);
+        setLoading(false);
+        streamed = true;
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let done = false;
+        while (!done) {
+          const { value, done: doneReading } = await reader.read();
+          done = doneReading;
+          if (value) {
+            const chunk = decoder.decode(value, { stream: !done });
+            setMessages((prev) =>
+              prev.map((m) => m.id === assistantId ? { ...m, content: m.content + chunk } : m)
+            );
+          }
+        }
+      }
+    } catch {
+      // Network error — fall through to local fallback below
+    }
+
+    if (!streamed) {
+      // Fallback: local template response (no API key or API error)
+      await new Promise((r) => setTimeout(r, 900 + Math.random() * 600));
+      const aiResponse = buildAIResponse(kpi);
+      const assistantMsg: Message = { id: assistantId, role: "assistant", content: aiResponse, timestamp: new Date() };
+      setMessages((prev) => [...prev, assistantMsg]);
+      setLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
