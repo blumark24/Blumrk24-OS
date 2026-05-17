@@ -194,11 +194,9 @@ html, body {
 
 /* Sidebar active */
 .sidebar-active {
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.10), rgba(30, 111, 217, 0.06));
-  color: #7dd3fc;
-  box-shadow:
-    inset 0 0 0 1px rgba(34, 211, 238, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(30, 111, 217, 0.15));
+  border-right: 3px solid #22d3ee;
+  color: #22d3ee;
 }
 
 /* Table */

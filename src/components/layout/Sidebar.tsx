@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, CheckSquare, UserCircle,
   DollarSign, Map, Bot, BarChart3, Settings, LogOut,
-  ChevronLeft, Network, Zap, X,
+  ChevronLeft, Network, Zap, X, ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -75,17 +75,17 @@ export default function Sidebar({
     <aside
       className={cn(
         "flex flex-col h-screen sticky top-0 transition-all duration-300 z-40",
-        "border-l border-[#1e3a5f]",
+        "border-l border-white/[0.08]",
         collapsed ? "w-16" : "w-[72vw] max-w-[300px] lg:w-56 lg:max-w-none"
       )}
       style={{
-        background: "rgba(8,18,34,0.92)",
-        backdropFilter: "blur(28px) saturate(135%)",
-        WebkitBackdropFilter: "blur(28px) saturate(135%)",
+        background: "rgba(10,22,40,0.55)",
+        backdropFilter: "blur(24px) saturate(135%)",
+        WebkitBackdropFilter: "blur(24px) saturate(135%)",
       }}
     >
       {/* Logo */}
-      <div className="relative flex items-center justify-center lg:justify-start px-3 py-4 border-b border-[#1e3a5f]">
+      <div className="relative flex items-center justify-center lg:justify-start px-3 py-4 border-b border-white/[0.06]">
         {collapsed ? (
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -97,12 +97,12 @@ export default function Sidebar({
             </svg>
           </div>
         ) : (
-          <OfficialBlumarkLogo className="w-[140px] lg:w-[155px]" />
+          <OfficialBlumarkLogo className="w-[140px] sm:w-[150px] lg:w-[150px]" />
         )}
         {/* Desktop collapse toggle */}
         <button
           onClick={onToggle}
-          className="mr-auto ms-2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors hidden lg:block"
+          className="mr-auto ms-2 text-white/55 hover:text-[#22D3EE] transition-colors hidden lg:block"
         >
           <ChevronLeft size={16} className={cn("transition-transform", collapsed && "rotate-180")} />
         </button>
@@ -110,7 +110,7 @@ export default function Sidebar({
         {onMobileClose && (
           <button
             onClick={onMobileClose}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8ba3c7] hover:text-[#22d3ee] transition-colors lg:hidden"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-white/55 hover:text-[#22D3EE] transition-colors lg:hidden"
             aria-label="إغلاق القائمة"
           >
             <X size={16} />
@@ -119,8 +119,8 @@ export default function Sidebar({
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-3 overflow-y-auto">
-        <ul className="space-y-1 px-2">
+      <nav className="flex-1 py-3 px-3 overflow-y-auto">
+        <ul className="space-y-1">
           {visibleItems.map(({ href, label, icon: Icon }) => {
             const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
@@ -129,31 +129,31 @@ export default function Sidebar({
                   href={href}
                   onClick={onMobileClose}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group",
+                    "flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-[13px] transition border",
                     isActive
-                      ? "sidebar-active"
-                      : "text-[#8ba3c7] hover:text-white hover:bg-[#1a3356]/40"
+                      ? "bg-gradient-to-l from-[#1E6FD9]/30 via-[#3B82F6]/15 to-transparent border-[rgba(34,211,238,0.24)] text-white shadow-[0_4px_16px_-4px_rgba(34,211,238,0.35)]"
+                      : "text-white/[0.72] hover:bg-white/[0.04] border-transparent"
                   )}
                   title={collapsed ? label : undefined}
                 >
-                  <Icon
-                    size={18}
-                    className={cn(
-                      "flex-shrink-0 transition-colors",
-                      isActive ? "text-[#7dd3fc]" : "group-hover:text-[#7dd3fc]"
-                    )}
-                  />
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Icon
+                      className={cn(
+                        "h-4 w-4 flex-shrink-0",
+                        isActive ? "text-[#22D3EE]" : "text-white/55"
+                      )}
+                      strokeWidth={1.6}
+                    />
+                    {!collapsed && <span className="truncate">{label}</span>}
+                  </div>
                   {!collapsed && (
-                    <>
-                      <span className="text-sm font-medium tracking-tight flex-1">{label}</span>
-                      <ChevronLeft
-                        size={14}
-                        className={cn(
-                          "flex-shrink-0 transition-colors",
-                          isActive ? "text-[#7dd3fc]" : "text-[#3e5879] group-hover:text-[#8ba3c7]"
-                        )}
-                      />
-                    </>
+                    <ArrowLeft
+                      className={cn(
+                        "h-3.5 w-3.5 flex-shrink-0",
+                        isActive ? "text-[#22D3EE]" : "text-white/30"
+                      )}
+                      strokeWidth={1.6}
+                    />
                   )}
                 </Link>
               </li>
@@ -163,40 +163,39 @@ export default function Sidebar({
       </nav>
 
       {/* User */}
-      <div className="border-t border-[#1e3a5f] p-3">
+      <div className="px-3 pb-3 pt-4 border-t border-white/[0.06]">
         <div
           className={cn(
-            "flex items-center gap-3 rounded-xl border border-[#1e3a5f]/70 bg-[#0d1f3c]/40 px-3 py-2.5",
+            "flex items-center gap-3 p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03]",
             collapsed && "justify-center"
           )}
         >
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#22D3EE] to-[#1E6FD9] text-[12px] font-semibold text-white shrink-0">
+            {user?.name?.slice(0, 2) ?? "؟"}
+          </span>
+          {!collapsed && (
+            <div className="flex-1 min-w-0">
+              <div className="text-[12.5px] font-semibold text-white truncate">{user?.name ?? "المستخدم"}</div>
+              <div className="text-[11px] text-white/55 truncate">{ROLE_LABELS[userRole] ?? userRole.replace(/_/g, " ")}</div>
+            </div>
+          )}
           {!collapsed && (
             <button
               onClick={handleLogout}
-              className="text-[#8ba3c7] hover:text-red-400 transition-colors flex-shrink-0"
+              className="text-white/55 hover:text-red-400 transition-colors flex-shrink-0"
               title="تسجيل الخروج"
+              aria-label="تسجيل الخروج"
             >
               <LogOut size={15} />
             </button>
           )}
-          {!collapsed && (
-            <div className="flex-1 min-w-0 text-right">
-              <div className="text-sm font-semibold text-white truncate">{user?.name ?? "المستخدم"}</div>
-              <div className="text-xs text-[#8ba3c7] truncate">{ROLE_LABELS[userRole] ?? userRole.replace(/_/g, " ")}</div>
-            </div>
-          )}
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold text-white"
-            style={{ background: "linear-gradient(135deg,#22d3ee,#1e6fd9)" }}
-          >
-            {user?.name?.slice(0, 2) ?? "؟"}
-          </div>
         </div>
         {collapsed && (
           <button
             onClick={handleLogout}
-            className="mt-2 w-full flex justify-center text-[#8ba3c7] hover:text-red-400 transition-colors"
+            className="mt-2 w-full flex justify-center text-white/55 hover:text-red-400 transition-colors"
             title="تسجيل الخروج"
+            aria-label="تسجيل الخروج"
           >
             <LogOut size={15} />
           </button>
@@ -217,9 +216,9 @@ export default function Sidebar({
           <div
             className="absolute inset-0"
             style={{
-              background: "rgba(2,8,20,0.55)",
-              backdropFilter: "blur(6px)",
-              WebkitBackdropFilter: "blur(6px)",
+              background: "rgba(2,8,20,0.6)",
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
             }}
             onClick={onMobileClose}
           />
