@@ -1,6 +1,6 @@
 "use client";
 
-import { usePermissions, Permission, mapAuthRoleToUserRole } from "@/contexts/PermissionsContext";
+import { usePermissions, Permission } from "@/contexts/PermissionsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { ShieldOff } from "lucide-react";
@@ -11,8 +11,8 @@ interface PageGuardProps {
 }
 
 export default function PageGuard({ permission, children }: PageGuardProps) {
-  const { rolePermissions } = usePermissions();
-  const { loading, user } = useAuth();
+  const { hasPermission } = usePermissions();
+  const { loading } = useAuth();
 
   // While auth is resolving show a branded spinner.
   // We must NOT render protected children before the real role is known, and
@@ -29,16 +29,7 @@ export default function PageGuard({ permission, children }: PageGuardProps) {
     );
   }
 
-  // Derive role directly from AuthContext.user rather than PermissionsContext
-  // state.  PermissionsContext updates userRole in a useEffect that fires one
-  // render after user.role becomes available, so using it here would cause a
-  // brief access-denied flash for super_admin on hard refresh.
-  const resolvedRole = user ? mapAuthRoleToUserRole(user.role) : "employee";
-  const hasPerm =
-    resolvedRole === "super_admin" ||
-    (rolePermissions[resolvedRole] ?? []).includes(permission);
-
-  if (hasPerm) {
+  if (hasPermission(permission)) {
     return <>{children}</>;
   }
 

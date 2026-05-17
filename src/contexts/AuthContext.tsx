@@ -1,15 +1,18 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  ReactNode,
-} from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import {
+  getCurrentProfile,
+  getCurrentSession,
+  getUserPermissionKeys,
+  signInWithEmailPassword,
+  signOut as authSignOut,
+  type UserProfile,
+  type PermissionKey,
+} from "@/lib/auth";
+import type { Session, User } from "@supabase/supabase-js";
 
 export interface AuthUser {
   id: string;
@@ -22,9 +25,20 @@ export interface AuthUser {
 
 interface AuthContextValue {
   user: AuthUser | null;
+  session: Session | null;
+  rawUser: User | null;
+  profile: UserProfile | null;
+  role: string;
+  permissions: PermissionKey[];
   loading: boolean;
+  error: string | null;
+  isAuthenticated: boolean;
+  isSuperAdmin: boolean;
+  hasPermission: (permissionKey: string) => boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   clearForcePasswordChange: () => Promise<void>;
 }
 
@@ -33,9 +47,20 @@ const APP_HOME_PATH = "/dashboard";
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
+  session: null,
+  rawUser: null,
+  profile: null,
+  role: "employee",
+  permissions: [],
   loading: true,
+  error: null,
+  isAuthenticated: false,
+  isSuperAdmin: false,
+  hasPermission: () => false,
   login: async () => ({ ok: false }),
-  logout: () => {},
+  logout: async () => {},
+  signOut: async () => {},
+  refreshProfile: async () => {},
   clearForcePasswordChange: async () => {},
 });
 
@@ -48,228 +73,183 @@ function setSessionCookie(value: string) {
   }
 }
 
-// ── buildUser ─────────────────────────────────────────────────────────────────
-// Always queries guaranteed base columns (SAFE_COLS) to avoid 400 errors for
-// optional migration-dependent columns (avatar_url, force_password_change).
-// Extended columns are fetched separately in a silent try/catch so that missing
-// columns degrade gracefully to safe defaults instead of logging 400 errors.
-
-async function buildUser(id: string, email: string): Promise<AuthUser> {
-  type SafeRow = { name?: string | null; role?: string | null; avatar?: string | null; email?: string | null };
-  type ExtRow  = { avatar_url?: string | null; force_password_change?: boolean | null };
-
-  const SAFE_COLS = "name, role, avatar, email";
-
-  async function queryByEmail(): Promise<SafeRow | null> {
-    const e = (email || "").trim().toLowerCase();
-    if (!e) return null;
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(SAFE_COLS)
-      .ilike("email", e)
-      .maybeSingle();
-    if (error) console.warn("[buildUser] email query error:", error.message);
-    return error ? null : ((data as SafeRow) ?? null);
-  }
-
-  async function queryById(): Promise<SafeRow | null> {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(SAFE_COLS)
-      .eq("id", id)
-      .maybeSingle();
-    if (error) console.warn("[buildUser] id query error:", error.message);
-    return error ? null : ((data as SafeRow) ?? null);
-  }
-
-  const profile = await queryByEmail() ?? await queryById();
-
-  if (!profile) {
-    console.error("[buildUser] No profile row found for", email, id);
-    return { id, email, name: email.split("@")[0], role: "employee", avatar: undefined, forcePasswordChange: false };
-  }
-
-  // Optional extended columns — may not exist if migrations 005/006 are absent.
-  // Failure here is non-fatal; defaults are used.
-  let avatarUrl: string | undefined;
-  let forcePasswordChange = false;
-  try {
-    const { data: ext } = await supabase
-      .from("profiles")
-      .select("avatar_url, force_password_change")
-      .eq("id", id)
-      .maybeSingle();
-    const row = ext as ExtRow | null;
-    if (row) {
-      avatarUrl            = row.avatar_url    ?? undefined;
-      forcePasswordChange  = row.force_password_change === true;
-    }
-  } catch {
-    // Columns absent — use safe defaults (false / undefined)
-  }
-
+function buildAuthUser(rawUser: User, profile: UserProfile | null): AuthUser {
+  const email = rawUser.email ?? "";
+  const role = (profile?.role ?? "employee").trim() || "employee";
   return {
-    id,
+    id: rawUser.id,
     email,
-    name:                profile.name ?? email.split("@")[0],
-    role:                profile.role ?? "employee",
-    avatar:              avatarUrl ?? profile.avatar ?? undefined,
-    forcePasswordChange,
+    name: profile?.full_name ?? profile?.name ?? email.split("@")[0] ?? "",
+    role,
+    avatar: profile?.avatar_url ?? profile?.avatar ?? undefined,
+    forcePasswordChange: Boolean(profile?.force_password_change),
   };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const router   = useRouter();
+  const router = useRouter();
   const pathname = usePathname();
 
-  const [user,    setUser]    = useState<AuthUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [rawUser, setRawUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [permissions, setPermissions] = useState<PermissionKey[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const clearLocalSession = useCallback(() => {
-    setUser(null);
-    setSessionCookie("");
-  }, []);
+  const user = useMemo(() => (rawUser ? buildAuthUser(rawUser, profile) : null), [rawUser, profile]);
+  const role = (profile?.role ?? user?.role ?? "employee").trim() || "employee";
+  const isAuthenticated = Boolean(session && rawUser);
+  const isSuperAdmin = role === "super_admin" || permissions.includes("*");
 
-  const safeInternalRedirect = useCallback((rawRedirect: string | null): string => {
-    if (!rawRedirect) return APP_HOME_PATH;
-    if (!rawRedirect.startsWith("/") || rawRedirect.startsWith("//")) return APP_HOME_PATH;
-    if (PUBLIC_PATHS.some((p) => rawRedirect === p || rawRedirect.startsWith(`${p}/`))) {
-      return APP_HOME_PATH;
+  const hasPermission = useCallback(
+    (permissionKey: string) => {
+      if (isSuperAdmin) return true;
+      if (!permissionKey) return false;
+      return permissions.includes(permissionKey);
+    },
+    [isSuperAdmin, permissions]
+  );
+
+  const hydrateFromSession = useCallback(async (nextSession: Session | null) => {
+    setSession(nextSession);
+    if (!nextSession?.user) {
+      setRawUser(null);
+      setProfile(null);
+      setPermissions([]);
+      setSessionCookie("");
+      return;
     }
-    return rawRedirect;
+
+    setRawUser(nextSession.user);
+    const p = await getCurrentProfile(nextSession.user.id, nextSession.user.email);
+    setProfile(p);
+
+    if (p) {
+      const keys = await getUserPermissionKeys(p);
+      setPermissions(Array.from(new Set(keys)));
+    } else {
+      setPermissions([]);
+    }
+
+    setSessionCookie("1");
   }, []);
+
+  const refreshProfile = useCallback(async () => {
+    if (!rawUser) return;
+    const p = await getCurrentProfile(rawUser.id, rawUser.email);
+    setProfile(p);
+    if (p) {
+      const keys = await getUserPermissionKeys(p);
+      setPermissions(Array.from(new Set(keys)));
+    }
+  }, [rawUser]);
 
   useEffect(() => {
     let mounted = true;
 
-    // Hard timeout: if Supabase takes > 10 s, unblock the UI so the page
-    // never hangs on a spinner indefinitely.  The user will see LandingPage
-    // and can refresh to try again.
-    const fallbackTimer = setTimeout(() => {
-      if (mounted) {
-        console.warn("[AuthContext] getSession timed out after 10 s — unblocking UI");
-        setLoading(false);
-      }
-    }, 10_000);
-
-    supabase.auth
-      .getSession()
-      .then(async ({ data: { session } }) => {
-        clearTimeout(fallbackTimer);
+    getCurrentSession()
+      .then(async (s) => {
         if (!mounted) return;
-        if (session?.user) {
-          const u = await buildUser(session.user.id, session.user.email ?? "");
-          if (!mounted) return;
-          setUser(u);
-          if (process.env.NODE_ENV === "development") {
-            console.log("[Auth] role loaded:", session.user.email, u.role);
-          }
-          setSessionCookie("1");
-        }
-        setLoading(false);
+        await hydrateFromSession(s);
+        setError(null);
       })
-      .catch((err) => {
-        clearTimeout(fallbackTimer);
+      .catch((e) => {
         if (!mounted) return;
-        console.error("[AuthContext] getSession failed:", err);
-        if (/refresh token/i.test(String(err?.message ?? ""))) {
-          clearLocalSession();
-          supabase.auth.signOut().catch(() => undefined);
-        }
-        setLoading(false);
+        setError(e instanceof Error ? e.message : "فشل التحقق من الجلسة");
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
       });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return;
-        if (session?.user) {
-          const u = await buildUser(session.user.id, session.user.email ?? "");
-          if (!mounted) return;
-          setUser(u);
-          if (process.env.NODE_ENV === "development") {
-            console.log("[Auth] state change:", event, session.user.email, u.role);
-          }
-          setSessionCookie("1");
-        } else {
-          setUser(null);
-          setSessionCookie("");
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+      if (!mounted) return;
+      try {
+        await hydrateFromSession(nextSession);
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "فشل تحديث الجلسة");
       }
-    );
+    });
 
     return () => {
       mounted = false;
-      clearTimeout(fallbackTimer);
       subscription.unsubscribe();
     };
-  }, [clearLocalSession]);
+  }, [hydrateFromSession]);
 
   useEffect(() => {
     if (loading) return;
 
-    const isPublic  = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-    const isAuthPg  = pathname === "/auth";
+    const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+    const isAuthPage = pathname === "/auth";
 
-    if (!user && !isPublic) {
+    if (!isAuthenticated && !isPublic) {
       router.replace(`/auth?redirect=${encodeURIComponent(pathname)}`);
-    } else if (user && isAuthPg) {
+    } else if (isAuthenticated && isAuthPage) {
       router.replace(APP_HOME_PATH);
     } else if (user?.forcePasswordChange && pathname !== "/settings") {
       router.replace("/settings?tab=account");
     }
-  }, [user, loading, pathname, router]);
+  }, [isAuthenticated, loading, pathname, router, user?.forcePasswordChange]);
 
-  const login = useCallback(
-    async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
-      const { error: signErr } = await supabase.auth.signInWithPassword({ email, password });
-      if (signErr) return { ok: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const u = await buildUser(session.user.id, session.user.email ?? "");
-        setUser(u);
-        setSessionCookie("1");
-        if (process.env.NODE_ENV === "development") {
-          console.log("[Auth] login:", session.user.email, u.role);
-        }
-        if (u.forcePasswordChange) {
-          router.replace("/settings?tab=account");
-          return { ok: true };
-        }
-      }
-
-      const redirect = typeof window !== "undefined"
-        ? new URLSearchParams(window.location.search).get("redirect")
-        : null;
-      router.replace(safeInternalRedirect(redirect));
+  const login = useCallback(async (email: string, password: string) => {
+    try {
+      await signInWithEmailPassword(email, password);
+      const s = await getCurrentSession();
+      await hydrateFromSession(s);
+      const redirect = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("redirect") : null;
+      const target = redirect && redirect.startsWith("/") && !redirect.startsWith("//") ? redirect : APP_HOME_PATH;
+      router.replace(target);
       return { ok: true };
-    },
-    [router, safeInternalRedirect]
-  );
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "فشل تسجيل الدخول" };
+    }
+  }, [hydrateFromSession, router]);
 
   const logout = useCallback(async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSessionCookie("");
+    await authSignOut();
+    await hydrateFromSession(null);
     router.replace("/auth");
-  }, [router]);
+  }, [hydrateFromSession, router]);
 
   const clearForcePasswordChange = useCallback(async () => {
     if (!user) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
+      const s = await getCurrentSession();
+      if (s?.access_token) {
         await fetch("/api/auth/clear-force-pw", {
           method: "POST",
-          headers: { Authorization: `Bearer ${session.access_token}` },
+          headers: { Authorization: `Bearer ${s.access_token}` },
         });
       }
-    } catch { /* ignore */ }
-    setUser((prev) => (prev ? { ...prev, forcePasswordChange: false } : null));
+      setProfile((prev) => (prev ? { ...prev, force_password_change: false } : prev));
+    } catch {
+      // no-op
+    }
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, clearForcePasswordChange }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        rawUser,
+        profile,
+        role,
+        permissions,
+        loading,
+        error,
+        isAuthenticated,
+        isSuperAdmin,
+        hasPermission,
+        login,
+        logout,
+        signOut: logout,
+        refreshProfile,
+        clearForcePasswordChange,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
