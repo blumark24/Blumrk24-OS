@@ -23,7 +23,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/",           label: "الرئيسية",         icon: LayoutDashboard, permission: "view_dashboard"    },
+  { href: "/dashboard", label: "الرئيسية",         icon: LayoutDashboard, permission: "view_dashboard"    },
   { href: "/employees",  label: "الموظفين",          icon: Users,           permission: "manage_users"      },
   { href: "/tasks",      label: "المهام",             icon: CheckSquare,     permission: "manage_tasks"      },
   { href: "/clients",    label: "العملاء (CRM)",      icon: UserCircle,      permission: "manage_clients"    },
