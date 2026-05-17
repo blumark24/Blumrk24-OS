@@ -78,7 +78,11 @@ export default function Sidebar({
         "border-l border-[#1e3a5f]",
         collapsed ? "w-16" : "w-[72vw] max-w-[300px] lg:w-56 lg:max-w-none"
       )}
-      style={{ background: "rgba(10,22,40,0.95)", backdropFilter: "blur(20px)" }}
+      style={{
+        background: "rgba(8,18,34,0.92)",
+        backdropFilter: "blur(28px) saturate(135%)",
+        WebkitBackdropFilter: "blur(28px) saturate(135%)",
+      }}
     >
       {/* Logo */}
       <div className="relative flex items-center justify-center lg:justify-start px-3 py-4 border-b border-[#1e3a5f]">
@@ -136,7 +140,7 @@ export default function Sidebar({
                     size={18}
                     className={cn(
                       "flex-shrink-0 transition-colors",
-                      isActive ? "text-[#22d3ee]" : "group-hover:text-[#22d3ee]"
+                      isActive ? "text-[#7dd3fc]" : "group-hover:text-[#7dd3fc]"
                     )}
                   />
                   {!collapsed && (
@@ -146,7 +150,7 @@ export default function Sidebar({
                         size={14}
                         className={cn(
                           "flex-shrink-0 transition-colors",
-                          isActive ? "text-[#22d3ee]" : "text-[#3e5879] group-hover:text-[#8ba3c7]"
+                          isActive ? "text-[#7dd3fc]" : "text-[#3e5879] group-hover:text-[#8ba3c7]"
                         )}
                       />
                     </>
@@ -212,7 +216,11 @@ export default function Sidebar({
           {/* Backdrop */}
           <div
             className="absolute inset-0"
-            style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)" }}
+            style={{
+              background: "rgba(2,8,20,0.55)",
+              backdropFilter: "blur(6px)",
+              WebkitBackdropFilter: "blur(6px)",
+            }}
             onClick={onMobileClose}
           />
           {/* Sidebar panel - RTL: slides in from right */}
