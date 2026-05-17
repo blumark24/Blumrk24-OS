@@ -1,6 +1,6 @@
 "use client";
 
-import LandingPage from "@/components/landing/LandingPage";
+import LandingPage from "@/components/landing/DemoDashboardLanding";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import JellyfishBackground from "@/components/jellyfish/JellyfishBackground";
 import {
