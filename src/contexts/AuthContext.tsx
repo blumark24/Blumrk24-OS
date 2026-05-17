@@ -29,7 +29,6 @@ interface AuthContextValue {
 }
 
 const PUBLIC_PATHS = ["/", "/auth", "/demo"];
-const APP_HOME_PATH = "/dashboard";
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
@@ -125,20 +124,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user,    setUser]    = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const clearLocalSession = useCallback(() => {
-    setUser(null);
-    setSessionCookie("");
-  }, []);
-
-  const safeInternalRedirect = useCallback((rawRedirect: string | null): string => {
-    if (!rawRedirect) return APP_HOME_PATH;
-    if (!rawRedirect.startsWith("/") || rawRedirect.startsWith("//")) return APP_HOME_PATH;
-    if (PUBLIC_PATHS.some((p) => rawRedirect === p || rawRedirect.startsWith(`${p}/`))) {
-      return APP_HOME_PATH;
-    }
-    return rawRedirect;
-  }, []);
-
   useEffect(() => {
     let mounted = true;
 
@@ -172,10 +157,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearTimeout(fallbackTimer);
         if (!mounted) return;
         console.error("[AuthContext] getSession failed:", err);
-        if (/refresh token/i.test(String(err?.message ?? ""))) {
-          clearLocalSession();
-          supabase.auth.signOut().catch(() => undefined);
-        }
         setLoading(false);
       });
 
@@ -202,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(fallbackTimer);
       subscription.unsubscribe();
     };
-  }, [clearLocalSession]);
+  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -213,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user && !isPublic) {
       router.replace(`/auth?redirect=${encodeURIComponent(pathname)}`);
     } else if (user && isAuthPg) {
-      router.replace(APP_HOME_PATH);
+      router.replace("/");
     } else if (user?.forcePasswordChange && pathname !== "/settings") {
       router.replace("/settings?tab=account");
     }
@@ -241,10 +222,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const redirect = typeof window !== "undefined"
         ? new URLSearchParams(window.location.search).get("redirect")
         : null;
-      router.replace(safeInternalRedirect(redirect));
+      router.replace(redirect || "/");
       return { ok: true };
     },
-    [router, safeInternalRedirect]
+    [router]
   );
 
   const logout = useCallback(async () => {
