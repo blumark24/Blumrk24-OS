@@ -262,8 +262,8 @@ export default function DashboardPage() {
                     <div className={`p-2 rounded-xl ${card.iconBg}`}>
                       <card.icon size={20} className={card.iconColor} />
                     </div>
-                    <div className="flex items-center gap-1 text-xs font-medium text-[#22d3ee]">
-                      <ArrowUpRight size={13} />
+                    <div className="inline-flex items-center gap-1 text-[11px] font-medium text-[#22d3ee] bg-[#22d3ee]/10 px-2 py-1 rounded-lg">
+                      <ArrowUpRight size={12} />
                       <span>مباشر</span>
                     </div>
                   </div>
