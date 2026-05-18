@@ -10,11 +10,11 @@ import {
 import {
   Users, CheckCircle2, ArrowUpRight, XCircle,
   AlertTriangle, Activity, Clock, UserCheck, DollarSign,
-  CheckCircle,
+  CheckCircle, X,
 } from "lucide-react";
 import { formatCurrency, timeAgo } from "@/lib/utils";
 import { useDashboardKPI, useProjects, useActivities, useTransactions, useEmployees, useClients, useTasks } from "@/hooks/useData";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ROLE_LABELS, usePermissions, mapAuthRoleToUserRole } from "@/contexts/PermissionsContext";
 import { KPICardSkeleton, ChartSkeleton, CardSkeleton } from "@/components/ui/Skeleton";
@@ -71,6 +71,9 @@ function todayArabic() {
   return `${d.getDate()} ${ARABIC_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+
+
+type BoardKey = "activeClients" | "completedTasks" | "incompleteTasks" | "overdueTasks";
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -175,6 +178,75 @@ export default function DashboardPage() {
     return (parts[0][0] ?? "") + (parts[1][0] ?? "");
   }
 
+  const totalClients = clients.length;
+  const activeClients = clients.filter((c) => c.status === "نشط").length;
+  const potentialClients = clients.filter((c) => c.status === "محتمل").length;
+  const contractedClients = clients.filter((c) => c.status === "متعاقد").length;
+  const pausedClients = clients.filter((c) => c.status === "متوقف").length;
+  const latestClient = clients.slice().sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))[0] ?? null;
+  const latestFiveClients = clients.slice().sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 5);
+
+  const completedTasks = tasks.filter((t) => t.status === "مكتملة");
+  const incompleteTasks = tasks.filter((t) => t.status !== "مكتملة");
+  const overdueTasks = tasks.filter((t) => t.status === "متأخرة" || (t.status !== "مكتملة" && t.dueDate && new Date(t.dueDate) < new Date()));
+  const latestFiveCompletedTasks = completedTasks.slice().sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 5);
+  const topFiveIncompleteTasks = incompleteTasks.slice().sort((a, b) => (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31")).slice(0, 5);
+  const topFiveOverdueTasks = overdueTasks.slice().sort((a, b) => (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31")).slice(0, 5);
+
+  const [activeBoard, setActiveBoard] = useState<BoardKey | null>(null);
+
+  const dashboardBoards = {
+    activeClients: {
+      summary: [
+        `إجمالي العملاء: ${totalClients}`,
+        `العملاء النشطون: ${activeClients}`,
+        `العملاء المحتملون: ${potentialClients}`,
+        latestClient ? `آخر عميل: ${latestClient.name}` : "آخر عميل: لا يوجد",
+      ],
+      detailRows: [
+        ["إجمالي العملاء", String(totalClients)],
+        ["النشطون", String(activeClients)],
+        ["المحتملون", String(potentialClients)],
+        ["المتعاقدون", String(contractedClients)],
+        ["المتوقفون", String(pausedClients)],
+      ],
+      detailList: latestFiveClients.map((c) => `${c.name} • ${c.status}${c.city ? ` • ${c.city}` : ""}`),
+    },
+    completedTasks: {
+      summary: [
+        `نسبة الإنجاز: ${kpi.completedTasksPct}%`,
+        latestCompletedTask ? `آخر مهمة مكتملة: ${latestCompletedTask.title}` : "آخر مهمة مكتملة: لا توجد بيانات حالياً",
+      ],
+      detailRows: [
+        ["عدد المهام المكتملة", String(completedTasks.length)],
+        ["نسبة الإنجاز", `${kpi.completedTasksPct}%`],
+      ],
+      detailList: latestFiveCompletedTasks.map((t) => t.title),
+    },
+    incompleteTasks: {
+      summary: [
+        `المهام غير المكتملة: ${kpi.incompleteTasks}`,
+        nearestDeadlineTask ? `أقرب موعد: ${nearestDeadlineTask.title} (${shortArabicDate(nearestDeadlineTask.dueDate)})` : "أقرب موعد: لا يوجد",
+      ],
+      detailRows: [
+        ["عدد المهام المتبقية", String(kpi.incompleteTasks)],
+        ["أقرب deadline", nearestDeadlineTask ? `${nearestDeadlineTask.title} (${shortArabicDate(nearestDeadlineTask.dueDate)})` : "لا يوجد"],
+      ],
+      detailList: topFiveIncompleteTasks.map((t) => `${t.title}${t.dueDate ? ` • ${shortArabicDate(t.dueDate)}` : ""}`),
+    },
+    overdueTasks: {
+      summary: [
+        `المهام المتأخرة: ${kpi.overdueTasks}`,
+        mostOverdueTask ? `أقدم مهمة متأخرة: ${mostOverdueTask.title}` : "أقدم مهمة متأخرة: لا توجد",
+      ],
+      detailRows: [
+        ["عدد المهام المتأخرة", String(kpi.overdueTasks)],
+        ["أقدم مهمة متأخرة", mostOverdueTask ? `${mostOverdueTask.title}${mostOverdueTask.dueDate ? ` (${shortArabicDate(mostOverdueTask.dueDate)})` : ""}` : "لا توجد"],
+      ],
+      detailList: topFiveOverdueTasks.map((t) => `${t.title}${t.dueDate ? ` • ${shortArabicDate(t.dueDate)}` : ""}`),
+    },
+  } as const;
+
   if (loading) return (
     <DashboardLayout>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-4 lg:mb-6">
@@ -186,6 +258,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
         <ChartSkeleton height={220} />
         <ChartSkeleton height={220} />
+
       </div>
     </DashboardLayout>
   );
@@ -193,6 +266,7 @@ export default function DashboardPage() {
 
   const kpiCards = [
     {
+      key:       "activeClients" as const,
       label:     "العملاء النشطون",
       value:     kpi.activeClients.toString(),
       subtitle:  "عميل نشط حالياً",
@@ -202,6 +276,7 @@ export default function DashboardPage() {
       iconColor: "text-blue-400",
     },
     {
+      key:       "completedTasks" as const,
       label:     "المهام المكتملة",
       value:     `${kpi.completedTasksPct}%`,
       subtitle:  "نسبة الإنجاز",
@@ -211,6 +286,7 @@ export default function DashboardPage() {
       iconColor: "text-emerald-400",
     },
     {
+      key:       "incompleteTasks" as const,
       label:     "المهام المتبقية",
       value:     kpi.incompleteTasks.toString(),
       subtitle:  "مهمة لم تُكتمل",
@@ -220,6 +296,7 @@ export default function DashboardPage() {
       iconColor: "text-amber-400",
     },
     {
+      key:       "overdueTasks" as const,
       label:     "المهام المتأخرة",
       value:     kpi.overdueTasks.toString(),
       subtitle:  "مهمة تجاوزت الموعد المحدد",
@@ -248,6 +325,7 @@ export default function DashboardPage() {
                       aria-label={`عرض تفاصيل ${card.label}`}
                       onMouseDown={(event) => event.preventDefault()}
                       onTouchStart={(event) => event.currentTarget.blur()}
+                      onClick={() => setActiveBoard(card.key)}
                       className="inline-flex items-center gap-1 text-xs font-medium text-[#22d3ee] select-none cursor-pointer touch-manipulation"
                       style={DISABLE_TEXT_SELECT_STYLE}
                     >
@@ -259,21 +337,7 @@ export default function DashboardPage() {
                   <div className="text-sm text-[#8ba3c7] mb-1">{card.label}</div>
                   <div className="text-xs text-[#6b87ab]">{card.subtitle}</div>
                   <div className="mt-3 pt-3 border-t border-[#1e3a5f]/40 text-[11px] text-[#8ba3c7] min-h-[28px]">
-                    {i === 0 && (
-                      isSuperAdmin && activeEmployeeNames.length > 0 ? (
-                        <div className="flex items-center gap-2 min-w-0" title={activeEmployeeNames.join("، ")}>
-                          <div className="flex -space-x-1.5 rtl:space-x-reverse flex-shrink-0">
-                            {activeEmployeeNames.map((name) => (
-                              <span key={name} className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold text-white ring-2 ring-[#0a1628]" style={{ background: "linear-gradient(135deg,#22d3ee,#1e6fd9)" }}>{initials(name)}</span>
-                            ))}
-                          </div>
-                          <span className="truncate">يدعمون العملاء</span>
-                        </div>
-                      ) : clients.length > 0 ? <span>{kpi.activeClients} من {clients.length} عميل</span> : <span>لا توجد بيانات حالياً</span>
-                    )}
-                    {i === 1 && (latestCompletedTask ? <div className="flex items-center gap-1.5 min-w-0"><CheckCircle size={11} className="text-emerald-400 flex-shrink-0" /><span className="truncate">{latestCompletedTask.title}</span></div> : <span>لا توجد بيانات حالياً</span>)}
-                    {i === 2 && (nearestDeadlineTask ? <div className="flex items-center justify-between gap-2 min-w-0"><div className="flex items-center gap-1.5 min-w-0"><Clock size={11} className="text-amber-400 flex-shrink-0" /><span className="truncate">{nearestDeadlineTask.title}</span></div><span className="text-[10px] text-[#6b87ab] flex-shrink-0">{shortArabicDate(nearestDeadlineTask.dueDate)}</span></div> : <span>لا توجد بيانات حالياً</span>)}
-                    {i === 3 && (mostOverdueTask ? <div className="flex items-center gap-1.5 min-w-0"><AlertTriangle size={11} className="text-red-400 flex-shrink-0" /><span className="truncate">{mostOverdueTask.title}</span></div> : tasks.length > 0 ? <span className="text-emerald-400">كل المهام في الموعد</span> : <span>لا توجد بيانات حالياً</span>)}
+                    {dashboardBoards[card.key].summary.map((line) => (<div key={line} className="truncate">{line}</div>))}
                   </div>
                   <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r ${card.gradient}`} />
                 </div>
@@ -298,6 +362,44 @@ export default function DashboardPage() {
           <div className="lg:col-span-2 glass-card p-5"><div className="flex items-center justify-between mb-4"><h3 className="text-white font-medium">المشاريع النشطة</h3><button className="text-[#22d3ee] text-xs hover:underline">عرض الكل</button></div>{projLoad ? <ChartSkeleton height={180} /> : projects.length === 0 ? <div className="py-8 text-center text-[#8ba3c7] text-sm">لا توجد مشاريع بعد</div> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-[#1e3a5f]">{["المشروع", "العميل", "التقدم", "الميزانية", "الموعد", "الحالة"].map((h) => <th key={h} className="text-right text-[#8ba3c7] font-medium pb-3">{h}</th>)}</tr></thead><tbody>{projects.map((project) => <tr key={project.id} className="table-row border-b border-[#1e3a5f]/40 last:border-0"><td className="py-3"><span className="text-white font-medium">{project.name}</span></td><td className="py-3 text-[#8ba3c7]">{project.clientName}</td><td className="py-3"><div className="flex items-center gap-2"><div className="progress-bar w-20"><div className="progress-fill" style={{ width: `${project.progress}%`, background: project.progress === 100 ? "#10b981" : "linear-gradient(90deg,#22d3ee,#1e6fd9)" }} /></div><span className="text-xs text-[#8ba3c7]">{project.progress}%</span></div></td><td className="py-3 text-[#8ba3c7] text-xs">{formatCurrency(project.budget)} SAR</td><td className="py-3 text-[#8ba3c7] text-xs">{project.deadline}</td><td className="py-3"><span className={`badge ${statusColors[project.status] ?? "status-pending"}`}>{project.status === "قيد_التنفيذ" ? "قيد التنفيذ" : project.status}</span></td></tr>)}</tbody></table></div>}</div>
           <div className="glass-card p-5"><div className="flex items-center justify-between mb-4"><h3 className="text-white font-medium text-sm">النشاطات الأخيرة</h3></div>{actLoad ? <CardSkeleton rows={5} /> : activities.length === 0 ? <div className="py-8 text-center text-[#8ba3c7] text-sm">لا توجد نشاطات بعد</div> : <div className="space-y-3">{activities.map((activity) => <div key={activity.id} className="flex items-start gap-3 pb-3 border-b border-[#1e3a5f]/40 last:border-0 last:pb-0"><div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-[#1a3356] text-[#22d3ee]">{activityIcons[activity.type] ?? <Activity size={14} />}</div><div className="flex-1 min-w-0"><p className="text-sm text-white leading-snug">{activity.description}</p><div className="flex items-center gap-1 mt-1 text-xs text-[#6b87ab]"><Clock size={10} /><span>{timeAgo(activity.timestamp)}</span></div></div></div>)}</div>}</div>
         </div>
+        {activeBoard && (
+          <div className="fixed inset-0 z-50 bg-[#040b17]/70 backdrop-blur-sm flex items-end lg:items-center justify-center p-0 lg:p-4" dir="rtl">
+            <div className="w-full lg:max-w-xl rounded-t-2xl lg:rounded-2xl border border-white/10 bg-[linear-gradient(135deg,rgba(18,33,58,.85),rgba(8,20,38,.82))] shadow-2xl backdrop-blur-xl p-5 lg:p-6 max-h-[85vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-bold text-lg">{kpiCards.find((c) => c.key === activeBoard)?.label}</h3>
+                <button
+                  type="button"
+                  onClick={() => setActiveBoard(null)}
+                  aria-label="إغلاق"
+                  className="w-9 h-9 rounded-xl border border-white/15 text-[#8ba3c7] hover:text-white hover:border-white/30 inline-flex items-center justify-center touch-manipulation"
+                  style={DISABLE_TEXT_SELECT_STYLE}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="space-y-2 mb-4">
+                {dashboardBoards[activeBoard].detailRows.map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between py-2 border-b border-[#1e3a5f]/40">
+                    <span className="text-[#8ba3c7] text-sm">{label}</span>
+                    <span className="text-white text-sm font-medium">{value}</span>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <h4 className="text-[#22d3ee] text-sm mb-2">آخر 5 عناصر</h4>
+                {dashboardBoards[activeBoard].detailList.length === 0 ? (
+                  <p className="text-[#8ba3c7] text-sm">لا توجد بيانات حالياً</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {dashboardBoards[activeBoard].detailList.map((item) => (
+                      <li key={item} className="text-sm text-white/90 bg-white/5 border border-white/10 rounded-xl px-3 py-2">{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );
