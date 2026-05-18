@@ -262,10 +262,10 @@ export default function DashboardPage() {
                     <div className={`p-2 rounded-xl ${card.iconBg}`}>
                       <card.icon size={20} className={card.iconColor} />
                     </div>
-                    <div className="flex items-center gap-1 text-xs font-medium text-[#22d3ee]">
+                    <button type="button" className="inline-flex items-center gap-1 text-xs font-medium text-[#22d3ee] select-none cursor-pointer">
                       <ArrowUpRight size={13} />
-                      <span>مباشر</span>
-                    </div>
+                      <span className="select-none">مباشر</span>
+                    </button>
                   </div>
                   <div className="text-2xl font-heading font-bold text-white mb-1">{card.value}</div>
                   <div className="text-sm text-[#8ba3c7] mb-1">{card.label}</div>
