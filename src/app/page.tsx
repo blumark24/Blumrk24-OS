@@ -357,17 +357,19 @@ export default function DashboardPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {kpiLoading
             ? Array.from({ length: 4 }).map((_, i) => <KPICardSkeleton key={i} />)
             : kpiCards.map((card, i) => (
-                <div key={i} className={`glass-card p-5 relative overflow-hidden flex flex-col bg-[#050b1f]/90 border border-white/10 ${boardTheme[card.key].glow}`}>
+                <div key={i} className={`glass-card relative w-full aspect-square overflow-hidden bg-[#050b1f]/90 border border-white/10 ${boardTheme[card.key].glow}`}>
                   <div className={`pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_52%_8%,rgba(255,255,255,0.18),transparent_38%),radial-gradient(circle_at_72%_32%,rgba(255,255,255,0.08),transparent_45%)]`} />
                   <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br from-[#0b1734]/95 via-[#071129]/95 to-[#050913]/95`} />
                   <div className={`pointer-events-none absolute inset-[1px] rounded-[inherit] border border-white/5`} />
                   <div className={`pointer-events-none absolute inset-0 rounded-[inherit] bg-gradient-to-br ${card.gradient} opacity-[0.10]`} />
 
-                  <div className="relative z-10 flex items-start justify-between mb-4">
+                  <div className="relative z-10 h-full flex flex-col justify-between p-3 sm:p-4 min-w-0">
+                    <div className="space-y-3 sm:space-y-4">
+                      <div className="relative z-10 flex items-start justify-between">
                     <button
                       type="button"
                       draggable={false}
@@ -384,20 +386,20 @@ export default function DashboardPage() {
                     <span className="text-white/70 text-lg leading-none tracking-[0.24em]">...</span>
                   </div>
 
-                  <div className="relative z-10 flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-base font-semibold text-[#eef4ff] truncate">{card.label}</div>
-                      <div className="text-[11px] text-[#97abcb] truncate">{card.subtitle}</div>
+                  <div className="relative z-10 flex items-start justify-between gap-2 min-w-0">
+                    <div className="min-w-0 line-clamp-1">
+                      <div className="text-base font-semibold text-[#eef4ff] truncate line-clamp-1">{card.label}</div>
+                      <div className="text-[11px] text-[#97abcb] truncate line-clamp-1">{card.subtitle}</div>
                     </div>
                     <div className={`shrink-0 p-2.5 rounded-2xl border backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,.22),0_8px_24px_rgba(0,0,0,.38)] ${boardTheme[card.key].iconTile}`}>
                       <card.icon size={19} className={card.iconColor} />
                     </div>
                   </div>
 
-                  <div className="relative z-10 mt-5 text-[58px] leading-[0.95] font-heading font-bold tracking-tight text-white">{card.value}</div>
-                  <div className="relative z-10 mt-1 text-sm text-[#ccdaef] truncate">{dashboardBoards[card.key].summary[1]}</div>
+                  <div className="relative z-10 text-[58px] leading-[0.95] font-heading font-bold tracking-tight text-white">{card.value}</div>
+                  <div className="relative z-10 text-sm text-[#ccdaef] truncate line-clamp-1">{dashboardBoards[card.key].summary[1]}</div>
 
-                  <div className={`relative z-10 mt-4 pt-3 border-t ${boardTheme[card.key].divider} text-[11px] min-h-[34px]`}>
+                  <div className={`relative z-10 pt-3 border-t ${boardTheme[card.key].divider} text-[11px] min-w-0`}>
                     {card.key === "completedTasks" && (
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full border border-emerald-300/35 relative">
@@ -427,6 +429,8 @@ export default function DashboardPage() {
                         <span className="truncate">{latestClient ? `آخر عميل: ${latestClient.name}` : "لا يوجد عميل جديد"}</span>
                       </div>
                     )}
+                  </div>
+                    </div>
                   </div>
                   <div className={`absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r ${card.gradient}`} />
                 </div>
