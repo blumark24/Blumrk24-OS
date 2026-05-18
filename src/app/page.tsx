@@ -10,12 +10,13 @@ import {
 import {
   Users, CheckCircle2, ArrowUpRight, XCircle,
   AlertTriangle, Activity, Clock, UserCheck, DollarSign,
+  CheckCircle,
 } from "lucide-react";
 import { formatCurrency, timeAgo } from "@/lib/utils";
-import { useDashboardKPI, useProjects, useActivities, useTransactions, useEmployees, useClients } from "@/hooks/useData";
+import { useDashboardKPI, useProjects, useActivities, useTransactions, useEmployees, useClients, useTasks } from "@/hooks/useData";
 import { useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ROLE_LABELS } from "@/contexts/PermissionsContext";
+import { ROLE_LABELS, usePermissions, mapAuthRoleToUserRole } from "@/contexts/PermissionsContext";
 import { KPICardSkeleton, ChartSkeleton, CardSkeleton } from "@/components/ui/Skeleton";
 import type { UserRole } from "@/contexts/PermissionsContext";
 
@@ -68,12 +69,22 @@ function todayArabic() {
 
 export default function DashboardPage() {
   const { user, loading }                      = useAuth();
+  const { userRole }                           = usePermissions();
   const { kpi, loading: kpiLoading }           = useDashboardKPI();
   const { data: projects, loading: projLoad }  = useProjects();
   const { data: activities, loading: actLoad } = useActivities();
   const { data: transactions }                 = useTransactions();
   const { data: employees }                    = useEmployees();
   const { data: clients }                      = useClients();
+  const { data: tasks }                        = useTasks();
+
+  // Super-admin gate for surfacing employee names inside KPI details.
+  // Mirrors the existing AuthContext/PermissionsContext logic — uses the
+  // resolved role from the live user (not the lazily-updated context state)
+  // so the gate decides correctly on the very first render after auth.
+  const isSuperAdmin = user
+    ? mapAuthRoleToUserRole(user.role) === "super_admin"
+    : userRole === "super_admin";
 
   const currentYear = new Date().getFullYear();
 
@@ -109,6 +120,74 @@ export default function DashboardPage() {
   const roleLabel = user?.role
     ? ROLE_LABELS[user.role as UserRole] ?? user.role
     : "—";
+
+  // ─── KPI card detail data ───────────────────────────────────────────
+  // All four computed from data already loaded by hooks above — no new
+  // queries, no new endpoints, no schema touched.
+
+  // Top active employees — only revealed for super_admin (PII gate).
+  const activeEmployeeNames = useMemo(() => {
+    if (!isSuperAdmin) return [];
+    return employees
+      .filter((e) => e.status === "نشط")
+      .slice(0, 3)
+      .map((e) => e.name);
+  }, [employees, isSuperAdmin]);
+
+  // Latest completed task — most recently completed by createdAt (proxy for
+  // completion time; the schema doesn't expose completedAt).
+  const latestCompletedTask = useMemo(() => {
+    const completed = tasks.filter((t) => t.status === "مكتملة");
+    if (!completed.length) return null;
+    return completed
+      .slice()
+      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))[0];
+  }, [tasks]);
+
+  // Nearest upcoming deadline — non-completed, not yet past due.
+  const nearestDeadlineTask = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const upcoming = tasks
+      .filter((t) => t.status !== "مكتملة" && t.dueDate)
+      .filter((t) => {
+        const d = new Date(t.dueDate);
+        return !isNaN(d.getTime()) && d.getTime() >= today.getTime();
+      })
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    return upcoming[0] ?? null;
+  }, [tasks]);
+
+  // Most-overdue task — explicitly labelled "متأخرة" OR not complete with a
+  // due-date in the past.
+  const mostOverdueTask = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const overdue = tasks
+      .filter((t) =>
+        t.status === "متأخرة" ||
+        (t.status !== "مكتملة" && t.dueDate && new Date(t.dueDate) < today)
+      )
+      .filter((t) => t.dueDate)
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    return overdue[0] ?? null;
+  }, [tasks]);
+
+  // Short Arabic date "12 أبريل" — for the deadline detail strip.
+  function shortArabicDate(iso: string): string {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
+    return `${d.getDate()} ${ARABIC_MONTHS[d.getMonth()]}`;
+  }
+
+  // Two-letter Arabic initials for stacked-avatar display.
+  function initials(name: string): string {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return "؟";
+    const parts = trimmed.split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2);
+    return (parts[0][0] ?? "") + (parts[1][0] ?? "");
+  }
 
   // While auth resolves: render the dashboard chrome with skeletons so
   // the user sees a live shell instead of a blank full-viewport spinner.
@@ -178,7 +257,7 @@ export default function DashboardPage() {
           {kpiLoading
             ? Array.from({ length: 4 }).map((_, i) => <KPICardSkeleton key={i} />)
             : kpiCards.map((card, i) => (
-                <div key={i} className="glass-card glass-card-hover p-5 relative overflow-hidden">
+                <div key={i} className="glass-card glass-card-hover p-5 relative overflow-hidden flex flex-col">
                   <div className="flex items-start justify-between mb-3">
                     <div className={`p-2 rounded-xl ${card.iconBg}`}>
                       <card.icon size={20} className={card.iconColor} />
@@ -191,6 +270,78 @@ export default function DashboardPage() {
                   <div className="text-2xl font-heading font-bold text-white mb-1">{card.value}</div>
                   <div className="text-sm text-[#8ba3c7] mb-1">{card.label}</div>
                   <div className="text-xs text-[#6b87ab]">{card.subtitle}</div>
+
+                  {/* ── Detail strip ─────────────────────────────────────
+                       Uses already-loaded data only.  Stays small + RTL +
+                       same colour palette as the rest of the card. */}
+                  <div className="mt-3 pt-3 border-t border-[#1e3a5f]/40 text-[11px] text-[#8ba3c7] min-h-[28px]">
+                    {/* 0 — Active Clients: super-admin sees active-employee
+                          initials; everyone else sees a compact ratio. */}
+                    {i === 0 && (
+                      isSuperAdmin && activeEmployeeNames.length > 0 ? (
+                        <div className="flex items-center gap-2 min-w-0" title={activeEmployeeNames.join("، ")}>
+                          <div className="flex -space-x-1.5 rtl:space-x-reverse flex-shrink-0">
+                            {activeEmployeeNames.map((name) => (
+                              <span
+                                key={name}
+                                className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold text-white ring-2 ring-[#0a1628]"
+                                style={{ background: "linear-gradient(135deg,#22d3ee,#1e6fd9)" }}
+                              >
+                                {initials(name)}
+                              </span>
+                            ))}
+                          </div>
+                          <span className="truncate">يدعمون العملاء</span>
+                        </div>
+                      ) : clients.length > 0 ? (
+                        <span>{kpi.activeClients} من {clients.length} عميل</span>
+                      ) : (
+                        <span>لا توجد بيانات حالياً</span>
+                      )
+                    )}
+
+                    {/* 1 — Completed Tasks: title of the latest completed task */}
+                    {i === 1 && (
+                      latestCompletedTask ? (
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <CheckCircle size={11} className="text-emerald-400 flex-shrink-0" />
+                          <span className="truncate">{latestCompletedTask.title}</span>
+                        </div>
+                      ) : (
+                        <span>لا توجد بيانات حالياً</span>
+                      )
+                    )}
+
+                    {/* 2 — Incomplete Tasks: nearest upcoming deadline */}
+                    {i === 2 && (
+                      nearestDeadlineTask ? (
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Clock size={11} className="text-amber-400 flex-shrink-0" />
+                            <span className="truncate">{nearestDeadlineTask.title}</span>
+                          </div>
+                          <span className="text-[10px] text-[#6b87ab] flex-shrink-0">{shortArabicDate(nearestDeadlineTask.dueDate)}</span>
+                        </div>
+                      ) : (
+                        <span>لا توجد بيانات حالياً</span>
+                      )
+                    )}
+
+                    {/* 3 — Overdue Tasks: oldest overdue title or success */}
+                    {i === 3 && (
+                      mostOverdueTask ? (
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <AlertTriangle size={11} className="text-red-400 flex-shrink-0" />
+                          <span className="truncate">{mostOverdueTask.title}</span>
+                        </div>
+                      ) : tasks.length > 0 ? (
+                        <span className="text-emerald-400">كل المهام في الموعد</span>
+                      ) : (
+                        <span>لا توجد بيانات حالياً</span>
+                      )
+                    )}
+                  </div>
+
                   <div className={`absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r ${card.gradient}`} />
                 </div>
               ))}
