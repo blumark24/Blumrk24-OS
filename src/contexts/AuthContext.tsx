@@ -6,6 +6,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   ReactNode,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -16,25 +17,35 @@ export interface AuthUser {
   name: string;
   email: string;
   role: string;
+  department?: string;
   avatar?: string;
+  is_active: boolean;
   forcePasswordChange: boolean;
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
+  loggingOut: boolean;
+  profileLoadError: string | null;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  refreshCurrentUser: () => Promise<void>;
   clearForcePasswordChange: () => Promise<void>;
 }
 
 const PUBLIC_PATHS = ["/", "/auth", "/demo"];
+const PROFILE_RETRY_DELAYS_MS = [0, 250, 700, 1500];
+const PROFILE_LOAD_ERROR_MSG = "حدث خطأ أثناء تحميل الملف الشخصي — حاول مجدداً";
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   loading: true,
+  loggingOut: false,
+  profileLoadError: null,
   login: async () => ({ ok: false }),
-  logout: () => {},
+  logout: async () => {},
+  refreshCurrentUser: async () => {},
   clearForcePasswordChange: async () => {},
 });
 
@@ -47,200 +58,296 @@ function setSessionCookie(value: string) {
   }
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ── buildUser ─────────────────────────────────────────────────────────────────
-// Always queries guaranteed base columns (SAFE_COLS) to avoid 400 errors for
-// optional migration-dependent columns (avatar_url, force_password_change).
-// Extended columns are fetched separately in a silent try/catch so that missing
-// columns degrade gracefully to safe defaults instead of logging 400 errors.
+// Returns AuthUser on a successful profile read, or `null` when the row could
+// not be located.  Never falls back to a default `employee` role — callers must
+// surface a profile-load error and not grant any implicit access.
 
-async function buildUser(id: string, email: string): Promise<AuthUser> {
-  type SafeRow = { name?: string | null; role?: string | null; avatar?: string | null; email?: string | null };
-  type ExtRow  = { avatar_url?: string | null; force_password_change?: boolean | null };
+type ProfileRow = {
+  id?: string | null;
+  name?: string | null;
+  role?: string | null;
+  email?: string | null;
+  avatar?: string | null;
+  department?: string | null;
+  is_active?: boolean | null;
+};
 
-  const SAFE_COLS = "name, role, avatar, email";
+type ExtRow = {
+  avatar_url?: string | null;
+  force_password_change?: boolean | null;
+};
 
-  async function queryByEmail(): Promise<SafeRow | null> {
-    const e = (email || "").trim().toLowerCase();
-    if (!e) return null;
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(SAFE_COLS)
-      .ilike("email", e)
-      .maybeSingle();
-    if (error) console.warn("[buildUser] email query error:", error.message);
-    return error ? null : ((data as SafeRow) ?? null);
-  }
+async function fetchProfileRow(authUserId: string, email: string): Promise<ProfileRow | null> {
+  const SAFE_COLS = "id, name, role, email, avatar, department, is_active";
 
-  async function queryById(): Promise<SafeRow | null> {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select(SAFE_COLS)
-      .eq("id", id)
-      .maybeSingle();
-    if (error) console.warn("[buildUser] id query error:", error.message);
-    return error ? null : ((data as SafeRow) ?? null);
-  }
+  // Prefer id-based lookup (matches Supabase auth.uid()), fall back to email.
+  const { data: byId, error: idErr } = await supabase
+    .from("profiles")
+    .select(SAFE_COLS)
+    .eq("id", authUserId)
+    .maybeSingle();
+  if (idErr) console.warn("[Auth] profiles by id error:", idErr.message);
+  if (byId) return byId as ProfileRow;
 
-  const profile = await queryByEmail() ?? await queryById();
+  const normalized = (email || "").trim().toLowerCase();
+  if (!normalized) return null;
 
-  if (!profile) {
-    console.error("[buildUser] No profile row found for", email, id);
-    return { id, email, name: email.split("@")[0], role: "employee", avatar: undefined, forcePasswordChange: false };
-  }
+  const { data: byEmail, error: emailErr } = await supabase
+    .from("profiles")
+    .select(SAFE_COLS)
+    .ilike("email", normalized)
+    .maybeSingle();
+  if (emailErr) console.warn("[Auth] profiles by email error:", emailErr.message);
+  return (byEmail as ProfileRow) ?? null;
+}
 
-  // Optional extended columns — may not exist if migrations 005/006 are absent.
-  // Failure here is non-fatal; defaults are used.
-  let avatarUrl: string | undefined;
-  let forcePasswordChange = false;
+async function fetchExtendedColumns(authUserId: string): Promise<ExtRow | null> {
   try {
-    const { data: ext } = await supabase
+    const { data } = await supabase
       .from("profiles")
       .select("avatar_url, force_password_change")
-      .eq("id", id)
+      .eq("id", authUserId)
       .maybeSingle();
-    const row = ext as ExtRow | null;
-    if (row) {
-      avatarUrl            = row.avatar_url    ?? undefined;
-      forcePasswordChange  = row.force_password_change === true;
-    }
+    return (data as ExtRow | null) ?? null;
   } catch {
-    // Columns absent — use safe defaults (false / undefined)
+    return null;
+  }
+}
+
+async function buildUserFromProfile(
+  authUserId: string,
+  email: string,
+  profile: ProfileRow,
+): Promise<AuthUser> {
+  const ext = await fetchExtendedColumns(authUserId);
+  return {
+    id:                  authUserId,
+    email:               profile.email ?? email,
+    name:                profile.name ?? (email ? email.split("@")[0] : ""),
+    role:                profile.role ?? "",
+    department:          profile.department ?? undefined,
+    avatar:              ext?.avatar_url ?? profile.avatar ?? undefined,
+    is_active:           profile.is_active !== false,
+    forcePasswordChange: ext?.force_password_change === true,
+  };
+}
+
+// ── resolveCurrentUserProfile ─────────────────────────────────────────────────
+// Single source of truth for the current authenticated user + profile.
+// Retries on missing profile (covers post-signup race where the row arrives a
+// few hundred ms after the session).  Never returns a fallback employee user.
+
+type ResolveResult =
+  | { kind: "no-session"; user: null }
+  | { kind: "ok"; user: AuthUser }
+  | { kind: "profile-error"; user: null };
+
+async function resolveCurrentUserProfile(): Promise<ResolveResult> {
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) return { kind: "no-session", user: null };
+
+  const email = authUser.email ?? "";
+
+  for (let attempt = 0; attempt < PROFILE_RETRY_DELAYS_MS.length; attempt++) {
+    if (PROFILE_RETRY_DELAYS_MS[attempt] > 0) {
+      await delay(PROFILE_RETRY_DELAYS_MS[attempt]);
+    }
+    const profile = await fetchProfileRow(authUser.id, email);
+    if (profile) {
+      const built = await buildUserFromProfile(authUser.id, email, profile);
+      return { kind: "ok", user: built };
+    }
   }
 
-  return {
-    id,
-    email,
-    name:                profile.name ?? email.split("@")[0],
-    role:                profile.role ?? "employee",
-    avatar:              avatarUrl ?? profile.avatar ?? undefined,
-    forcePasswordChange,
-  };
+  console.error("[Auth] profile row not found after retries for", authUser.id, email);
+  return { kind: "profile-error", user: null };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router   = useRouter();
   const pathname = usePathname();
 
-  const [user,    setUser]    = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user,             setUser]             = useState<AuthUser | null>(null);
+  const [loading,          setLoading]          = useState(true);
+  const [loggingOut,       setLoggingOut]       = useState(false);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
+
+  const mountedRef = useRef(true);
+
+  const applyResolved = useCallback((res: ResolveResult) => {
+    if (!mountedRef.current) return;
+    if (res.kind === "ok") {
+      setUser(res.user);
+      setProfileLoadError(null);
+      setSessionCookie("1");
+    } else if (res.kind === "no-session") {
+      setUser(null);
+      setProfileLoadError(null);
+      setSessionCookie("");
+    } else {
+      // profile-error: auth session is valid but the profile row could not be
+      // read.  Surface a recoverable error and clear the user — the redirect
+      // effect deliberately keeps them on-page so the retry banner is visible.
+      setUser(null);
+      setProfileLoadError(PROFILE_LOAD_ERROR_MSG);
+    }
+  }, []);
+
+  const refreshCurrentUser = useCallback(async () => {
+    const res = await resolveCurrentUserProfile();
+    applyResolved(res);
+  }, [applyResolved]);
 
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
 
-    // Hard timeout: if Supabase getSession() does not respond within 5 s,
-    // unblock the UI so the page never hangs on a spinner.  The user will
-    // see LandingPage (or be redirected to /auth) and can retry.
+    // Hard timeout: if auth bootstrap exceeds 5s, unblock the UI so the page
+    // never hangs on a spinner.  The user can retry from /auth.
     const fallbackTimer = setTimeout(() => {
-      if (mounted) {
-        console.warn("[AuthContext] getSession timed out after 5 s — unblocking UI");
+      if (mountedRef.current) {
+        console.warn("[AuthContext] bootstrap timed out after 5s — unblocking UI");
         setLoading(false);
       }
     }, 5_000);
 
-    supabase.auth
-      .getSession()
-      .then(async ({ data: { session } }) => {
-        clearTimeout(fallbackTimer);
-        if (!mounted) return;
-        if (session?.user) {
-          const u = await buildUser(session.user.id, session.user.email ?? "");
-          if (!mounted) return;
-          setUser(u);
-          if (process.env.NODE_ENV === "development") {
-            console.log("[Auth] role loaded:", session.user.email, u.role);
-          }
-          setSessionCookie("1");
-        } else {
-          // No live session — clear any stale cookie so middleware
-          // does not treat the user as authenticated.  Without this,
-          // a leftover blumark_session=1 cookie can pass middleware
-          // and then bounce the user between /auth and / forever.
-          setSessionCookie("");
-        }
-        setLoading(false);
-      })
-      .catch((err) => {
-        clearTimeout(fallbackTimer);
-        if (!mounted) return;
-        console.error("[AuthContext] getSession failed:", err);
-        setSessionCookie("");
-        setLoading(false);
-      });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return;
-        if (session?.user) {
-          const u = await buildUser(session.user.id, session.user.email ?? "");
-          if (!mounted) return;
-          setUser(u);
-          if (process.env.NODE_ENV === "development") {
-            console.log("[Auth] state change:", event, session.user.email, u.role);
-          }
-          setSessionCookie("1");
-        } else {
+    (async () => {
+      try {
+        const res = await resolveCurrentUserProfile();
+        applyResolved(res);
+      } catch (err) {
+        console.error("[AuthContext] bootstrap failed:", err);
+        if (mountedRef.current) {
           setUser(null);
+          setProfileLoadError(null);
           setSessionCookie("");
         }
+      } finally {
+        clearTimeout(fallbackTimer);
+        if (mountedRef.current) setLoading(false);
       }
-    );
+    })();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mountedRef.current) return;
+      switch (event) {
+        case "SIGNED_OUT":
+          setUser(null);
+          setProfileLoadError(null);
+          setSessionCookie("");
+          return;
+        case "SIGNED_IN":
+        case "TOKEN_REFRESHED":
+        case "USER_UPDATED":
+          if (session?.user) {
+            // Defer to next tick so Supabase has propagated the session
+            // through its cookie/storage adapters before we read profile.
+            setTimeout(() => {
+              if (mountedRef.current) void refreshCurrentUser();
+            }, 0);
+          }
+          return;
+        default:
+          return;
+      }
+    });
 
     return () => {
-      mounted = false;
+      mountedRef.current = false;
       clearTimeout(fallbackTimer);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [applyResolved, refreshCurrentUser]);
 
   useEffect(() => {
     if (loading) return;
 
-    const isPublic  = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-    const isAuthPg  = pathname === "/auth";
+    const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+    const isAuthPg = pathname === "/auth" || pathname.startsWith("/auth/");
 
-    if (!user && !isPublic) {
+    // When the auth session is valid but the profile failed to load, keep the
+    // user on the current page so the error banner + retry is visible instead
+    // of bouncing them to /auth (which would hide the recoverable error).
+    if (!user && !isPublic && !profileLoadError) {
       router.replace(`/auth?redirect=${encodeURIComponent(pathname)}`);
-    } else if (user && isAuthPg) {
-      router.replace("/");
-    } else if (user?.forcePasswordChange && pathname !== "/settings") {
+    } else if (user && pathname === "/auth") {
+      router.replace("/dashboard");
+    } else if (user?.forcePasswordChange && pathname !== "/settings" && !isAuthPg) {
       router.replace("/settings?tab=account");
     }
-  }, [user, loading, pathname, router]);
+  }, [user, loading, pathname, profileLoadError, router]);
 
   const login = useCallback(
     async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
       const { error: signErr } = await supabase.auth.signInWithPassword({ email, password });
       if (signErr) return { ok: false, error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" };
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const u = await buildUser(session.user.id, session.user.email ?? "");
-        setUser(u);
+      const res = await resolveCurrentUserProfile();
+      if (res.kind !== "ok") {
+        // Session is live but profile couldn't be loaded — back out cleanly.
+        await supabase.auth.signOut().catch(() => {});
+        if (mountedRef.current) {
+          setUser(null);
+          setSessionCookie("");
+          setProfileLoadError(res.kind === "profile-error" ? PROFILE_LOAD_ERROR_MSG : null);
+        }
+        return {
+          ok: false,
+          error: res.kind === "profile-error" ? PROFILE_LOAD_ERROR_MSG : "تعذّر استكمال تسجيل الدخول",
+        };
+      }
+
+      if (res.user.is_active === false) {
+        await supabase.auth.signOut().catch(() => {});
+        if (mountedRef.current) {
+          setUser(null);
+          setSessionCookie("");
+          setProfileLoadError(null);
+        }
+        return { ok: false, error: "الحساب غير نشط" };
+      }
+
+      if (mountedRef.current) {
+        setUser(res.user);
+        setProfileLoadError(null);
         setSessionCookie("1");
-        if (process.env.NODE_ENV === "development") {
-          console.log("[Auth] login:", session.user.email, u.role);
-        }
-        if (u.forcePasswordChange) {
-          router.replace("/settings?tab=account");
-          return { ok: true };
-        }
+      }
+
+      if (res.user.forcePasswordChange) {
+        router.replace("/settings?tab=account");
+        return { ok: true };
       }
 
       const redirect = typeof window !== "undefined"
         ? new URLSearchParams(window.location.search).get("redirect")
         : null;
-      router.replace(redirect || "/");
+      router.replace(redirect && redirect.startsWith("/") ? redirect : "/dashboard");
       return { ok: true };
     },
-    [router]
+    [router],
   );
 
   const logout = useCallback(async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSessionCookie("");
-    router.replace("/auth");
-  }, [router]);
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("[Auth] signOut failed:", err);
+    } finally {
+      if (mountedRef.current) {
+        setUser(null);
+        setProfileLoadError(null);
+        setSessionCookie("");
+        setLoggingOut(false);
+      }
+      router.replace("/auth");
+    }
+  }, [loggingOut, router]);
 
   const clearForcePasswordChange = useCallback(async () => {
     if (!user) return;
@@ -257,7 +364,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, clearForcePasswordChange }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        loggingOut,
+        profileLoadError,
+        login,
+        logout,
+        refreshCurrentUser,
+        clearForcePasswordChange,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

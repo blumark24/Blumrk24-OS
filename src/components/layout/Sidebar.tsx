@@ -23,7 +23,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/",           label: "الرئيسية",         icon: LayoutDashboard, permission: "view_dashboard"    },
+  { href: "/dashboard",  label: "الرئيسية",         icon: LayoutDashboard, permission: "view_dashboard"    },
   { href: "/employees",  label: "الموظفين",          icon: Users,           permission: "manage_users"      },
   { href: "/tasks",      label: "المهام",             icon: CheckSquare,     permission: "manage_tasks"      },
   { href: "/clients",    label: "العملاء (CRM)",      icon: UserCircle,      permission: "manage_clients"    },
@@ -54,22 +54,27 @@ export default function Sidebar({
   onMobileClose,
 }: SidebarProps) {
   const pathname    = usePathname();
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading, loggingOut, logout } = useAuth();
   const toast       = useToast();
   const { hasPermission, userRole } = usePermissions();
 
   const handleLogout = () => {
+    if (loggingOut) return;
     toast.info("تم تسجيل الخروج بنجاح");
-    setTimeout(() => logout(), 600);
+    void logout();
   };
 
-  // While auth is loading: show all items (avoids flash of limited sidebar)
-  // After auth: super_admin gets all, others get filtered items
-  const visibleItems = authLoading
+  // While auth/profile is still resolving: show all items (avoids a flash of a
+  // limited sidebar for super_admin on hard refresh).  After resolution:
+  // super_admin gets all, others get filtered items.  Treat unknown userRole
+  // (null) the same as loading — we don't yet know what to show.
+  const visibleItems = authLoading || !userRole
     ? NAV_ITEMS
     : userRole === "super_admin"
       ? NAV_ITEMS
       : NAV_ITEMS.filter((item) => hasPermission(item.permission));
+
+  const roleLabel = userRole ? (ROLE_LABELS[userRole] ?? userRole.replace(/_/g, " ")) : "";
 
   // ─── Inner card (the visible glass panel — matches DemoSidebar look) ─────
   // Outer <aside> handles positioning (sticky/fixed); inner div is the actual
@@ -124,7 +129,9 @@ export default function Sidebar({
       <nav className="flex-1 overflow-y-auto px-3 py-3">
         <ul className="space-y-1">
           {visibleItems.map(({ href, label, icon: Icon }) => {
-            const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            const isActive = href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname.startsWith(href);
             return (
               <li key={href}>
                 <Link
@@ -181,13 +188,16 @@ export default function Sidebar({
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <div className="text-[12.5px] font-semibold text-white truncate">{user?.name ?? "المستخدم"}</div>
-              <div className="text-[11px] text-white/55 truncate">{ROLE_LABELS[userRole] ?? userRole.replace(/_/g, " ")}</div>
+              {/* Hide role text while we are still resolving the profile to
+                  avoid an "employee" fallback flash for super_admin users. */}
+              <div className="text-[11px] text-white/55 truncate">{roleLabel || " "}</div>
             </div>
           )}
           {!collapsed && (
             <button
               onClick={handleLogout}
-              className="text-white/55 hover:text-red-400 transition-colors flex-shrink-0"
+              disabled={loggingOut}
+              className="text-white/55 hover:text-red-400 transition-colors flex-shrink-0 disabled:opacity-50 disabled:hover:text-white/55 disabled:cursor-not-allowed"
               title="تسجيل الخروج"
               aria-label="تسجيل الخروج"
             >
@@ -198,7 +208,8 @@ export default function Sidebar({
         {collapsed && (
           <button
             onClick={handleLogout}
-            className="mt-2 w-full flex justify-center text-white/55 hover:text-red-400 transition-colors"
+            disabled={loggingOut}
+            className="mt-2 w-full flex justify-center text-white/55 hover:text-red-400 transition-colors disabled:opacity-50 disabled:hover:text-white/55 disabled:cursor-not-allowed"
             title="تسجيل الخروج"
             aria-label="تسجيل الخروج"
           >

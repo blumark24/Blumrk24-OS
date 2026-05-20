@@ -88,23 +88,35 @@ const QUICK_CREATE = [
 // ─── Profile Dropdown ───────────────────────────────────────────────────────
 
 interface ProfileDropdownProps {
-  user: { id: string; name: string; email: string; role: string; avatar?: string } | null;
-  userRole: string;
-  managedUsers: { userId: string; department: string; isActive: boolean }[];
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    avatar?: string;
+    department?: string;
+    is_active?: boolean;
+  } | null;
+  userRole: string | null;
+  loggingOut: boolean;
   onLogout: () => void;
   onNavigate: (href: string) => void;
   open: boolean;
   onToggle: () => void;
 }
 
-function ProfileDropdown({ user, userRole, managedUsers, onLogout, onNavigate, open, onToggle }: ProfileDropdownProps) {
+function ProfileDropdown({ user, userRole, loggingOut, onLogout, onNavigate, open, onToggle }: ProfileDropdownProps) {
   if (!user) return null;
 
-  const currentMU = managedUsers.find((u) => u.userId === user.id);
-  const department = currentMU?.department || "—";
-  const isActive   = currentMU?.isActive ?? true;
+  // Department and active status come from the authenticated user's own
+  // profile row — never look these up via managedUsers (which is for the
+  // admin panel and may not be loaded yet, causing a "—" / "موظف" flash).
+  const department = user.department || "—";
+  const isActive   = user.is_active !== false;
   const initials   = user.name?.slice(0, 2) ?? "م";
-  const roleLabel  = ROLE_LABELS[userRole as keyof typeof ROLE_LABELS] ?? userRole.replace(/_/g, " ");
+  const roleLabel  = userRole
+    ? (ROLE_LABELS[userRole] ?? userRole.replace(/_/g, " "))
+    : "";
 
   return (
     <div className="relative">
@@ -124,7 +136,9 @@ function ProfileDropdown({ user, userRole, managedUsers, onLogout, onNavigate, o
         </div>
         <div className="hidden sm:block text-right leading-none">
           <div className="text-xs font-medium text-white">{user.name}</div>
-          <div className="text-[10px] text-[#8ba3c7] mt-0.5">{roleLabel}</div>
+          {/* Hide role line until we know the resolved role to prevent an
+              "employee" fallback flash for super_admin users on hard refresh. */}
+          {roleLabel ? <div className="text-[10px] text-[#8ba3c7] mt-0.5">{roleLabel}</div> : null}
         </div>
         <ChevronLeft size={12} className={cn("text-[#8ba3c7] hidden sm:block transition-transform", open && "rotate-90")} />
       </button>
@@ -168,7 +182,7 @@ function ProfileDropdown({ user, userRole, managedUsers, onLogout, onNavigate, o
             <div className="flex items-center gap-3 text-xs">
               <ShieldCheck size={14} className="text-[#22d3ee] flex-shrink-0" />
               <span className="text-[#8ba3c7]">الدور:</span>
-              <span className="text-white font-medium mr-auto">{roleLabel}</span>
+              <span className="text-white font-medium mr-auto">{roleLabel || "—"}</span>
             </div>
             <div className="flex items-center gap-3 text-xs">
               <Building2 size={14} className="text-[#22d3ee] flex-shrink-0" />
@@ -195,11 +209,12 @@ function ProfileDropdown({ user, userRole, managedUsers, onLogout, onNavigate, o
             </button>
             <div className="my-1 border-t border-[#1e3a5f]" />
             <button
-              onClick={() => { onLogout(); onToggle(); }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all text-right"
+              onClick={() => { if (loggingOut) return; onLogout(); onToggle(); }}
+              disabled={loggingOut}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all text-right disabled:opacity-50 disabled:hover:text-red-400 disabled:hover:bg-transparent disabled:cursor-not-allowed"
             >
               <LogOut size={15} className="flex-shrink-0" />
-              تسجيل الخروج
+              {loggingOut ? "جارٍ تسجيل الخروج..." : "تسجيل الخروج"}
             </button>
           </div>
         </div>
@@ -212,8 +227,8 @@ function ProfileDropdown({ user, userRole, managedUsers, onLogout, onNavigate, o
 
 export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const router = useRouter();
-  const { user, logout } = useAuth();
-  const { userRole, managedUsers } = usePermissions();
+  const { user, logout, loggingOut } = useAuth();
+  const { userRole } = usePermissions();
 
   if (process.env.NODE_ENV === "development") {
     console.log("Header userRole:", userRole);
@@ -258,9 +273,10 @@ export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: ()
   }, []);
 
   const handleLogout = useCallback(() => {
+    if (loggingOut) return;
     toast.info("تم تسجيل الخروج بنجاح");
-    setTimeout(() => logout(), 600);
-  }, [logout, toast]);
+    void logout();
+  }, [logout, loggingOut, toast]);
 
   const goTo = useCallback((href: string) => {
     router.push(href);
@@ -472,7 +488,7 @@ export default function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: ()
         <ProfileDropdown
           user={user}
           userRole={userRole}
-          managedUsers={managedUsers}
+          loggingOut={loggingOut}
           onLogout={handleLogout}
           onNavigate={goTo}
           open={openProfile}

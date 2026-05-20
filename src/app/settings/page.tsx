@@ -385,7 +385,7 @@ function SettingsContent() {
       toast.success("تم تغيير كلمة المرور بنجاح");
       if (wasForcedAccount) {
         await clearForcePasswordChange();
-        setTimeout(() => router.replace("/"), 1500);
+        setTimeout(() => router.replace("/dashboard"), 1500);
       }
     } catch {
       setPwError("حدث خطأ غير متوقع");
