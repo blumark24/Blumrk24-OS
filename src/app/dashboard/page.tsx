@@ -440,8 +440,7 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5 sm:space-y-6">
-
+      <div className="space-y-5 sm:space-y-6 pb-[max(env(safe-area-inset-bottom),1rem)]">
         {/* ─── Hero: AI insight / welcome banner ─────────────────────────── */}
         <section className={`${SURFACE_PANEL} p-4 sm:p-6 lg:p-7`}>
           <JellyfishBackground />
