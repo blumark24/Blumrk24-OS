@@ -11,7 +11,7 @@ import {
   Users, CheckCircle2, XCircle, AlertTriangle, Activity, Clock,
   UserCheck, DollarSign, CheckCircle, X, Sparkles, TrendingUp, Timer, Siren,
   Bot, CheckSquare, UserPlus, FileText, Wallet, BarChart3, Gauge, ListChecks,
-  ArrowLeft, ShieldCheck, Building2, CalendarDays, Search, Bell, Menu, Plus,
+  ArrowLeft, ShieldCheck, Building2, CalendarDays,
 } from "lucide-react";
 import { formatCurrency, timeAgo } from "@/lib/utils";
 import { useDashboardKPI, useProjects, useActivities, useTransactions, useEmployees, useClients, useTasks } from "@/hooks/useData";
@@ -287,14 +287,6 @@ export default function DashboardPage() {
     return `${d.getDate()} ${ARABIC_MONTHS[d.getMonth()]}`;
   }
 
-  function initials(name: string): string {
-    const trimmed = (name || "").trim();
-    if (!trimmed) return "؟";
-    const parts = trimmed.split(/\s+/);
-    if (parts.length === 1) return parts[0].slice(0, 2);
-    return (parts[0][0] ?? "") + (parts[1][0] ?? "");
-  }
-
   const totalClients = clients.length;
   const activeClients = clients.filter((c) => c.status === "نشط").length;
   const potentialClients = clients.filter((c) => c.status === "محتمل").length;
@@ -330,6 +322,17 @@ export default function DashboardPage() {
       : kpi.incompleteTasks > 0
         ? `${kpi.incompleteTasks} مهمة قيد التنفيذ، ومعدل الإنجاز الحالي ${kpi.completedTasksPct}%.`
         : "جميع المهام منجزة — أداء ممتاز اليوم! 🎯";
+
+  // Rule-based Smart Insights — derived only from existing KPI values.
+  // No external AI, no fabricated metrics; an insight is omitted when its data is absent.
+  const smartInsights: { icon: React.ElementType; tint: TintKey; text: string }[] = [];
+  if (kpi.overdueTasks > 0)
+    smartInsights.push({ icon: Siren,        tint: "rose",    text: `لديك ${kpi.overdueTasks} مهمة متأخرة تحتاج متابعة فورية.` });
+  if (kpi.incompleteTasks > 0)
+    smartInsights.push({ icon: Timer,        tint: "amber",   text: `يوجد ${kpi.incompleteTasks} مهمة قيد المتابعة هذا الأسبوع.` });
+  smartInsights.push({ icon: CheckCircle2,   tint: "emerald", text: `نسبة الإنجاز الحالية ${kpi.completedTasksPct}%.` });
+  if (kpi.activeClients > 0)
+    smartInsights.push({ icon: Users,        tint: "cyan",    text: `يوجد ${kpi.activeClients} عميل نشط حالياً.` });
 
   const [activeBoard, setActiveBoard] = useState<BoardKey | null>(null);
 
@@ -441,41 +444,6 @@ export default function DashboardPage() {
   return (
     <DashboardLayout>
       <div className="space-y-5 sm:space-y-6 pb-[max(env(safe-area-inset-bottom),1rem)]">
-        {/* ─── Command bar (desktop + compact mobile header) ───────────────────── */}
-        <section className={`${CARD_BASE} p-3 sm:p-4`}>
-          <div className="flex items-center justify-between gap-2 sm:hidden">
-            <button className="h-11 w-11 rounded-xl border border-white/10 bg-white/[0.03] text-[#8ba3c7] inline-flex items-center justify-center">
-              <Menu size={18} />
-            </button>
-            <div className="min-w-0 text-center">
-              <p className="text-[11px] text-[#8ba3c7]">Blumark24 OS</p>
-              <p className="text-sm font-semibold text-white truncate">لوحة القيادة</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button className="h-11 w-11 rounded-xl border border-white/10 bg-white/[0.03] text-[#8ba3c7] inline-flex items-center justify-center">
-                <Bell size={17} />
-              </button>
-              <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-cyan-400/30 to-violet-500/20 ring-1 ring-white/20 flex items-center justify-center text-white text-sm font-bold">
-                {initials(user?.name ?? "U")}
-              </div>
-            </div>
-          </div>
-          <div className="mt-3 sm:mt-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-            <div className="relative min-w-0 flex-1">
-              <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8ba3c7]" />
-              <input readOnly value="بحث ذكي سريع..." className="w-full rounded-xl border border-white/10 bg-white/[0.03] pr-9 pl-3 py-2.5 text-sm text-[#8ba3c7] outline-none" />
-            </div>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <span className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/25 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-100">
-                <Bot size={14} /> AI Assistant
-              </span>
-              <button className="h-11 w-11 rounded-full border border-cyan-300/35 bg-cyan-400/10 text-cyan-200 inline-flex items-center justify-center shadow-[0_0_26px_rgba(34,211,238,0.35)]">
-                <Plus size={17} />
-              </button>
-            </div>
-          </div>
-        </section>
-
         {/* ─── Hero: AI insight / welcome banner ─────────────────────────── */}
         <section className={`${SURFACE_PANEL} p-4 sm:p-6 lg:p-7`}>
           <JellyfishBackground />
@@ -628,18 +596,49 @@ export default function DashboardPage() {
               })}
         </div>
 
-        {/* ─── Quick actions ─────────────────────────────────────────────── */}
-        <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className={`${SECTION_TITLE} text-sm`}>إجراءات سريعة</h2>
-            <span className="text-[11px] text-[#6b87ab]">اختصارات لأهم العمليات</span>
+        {/* ─── Smart Insights (rule-based, free — no external AI) ────────── */}
+        <section className={`${SURFACE_PANEL} p-4 sm:p-5`}>
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_92%_-20%,rgba(124,58,237,0.16),transparent_55%),radial-gradient(110%_120%_at_5%_120%,rgba(34,211,238,0.12),transparent_55%)]" />
+          <div className="relative z-10">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className={`${ICON_ORB} w-9 h-9 shrink-0 bg-violet-400/10 ring-1 ring-violet-300/25`}>
+                  <Sparkles size={16} className="text-violet-300" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className={`${SECTION_TITLE} text-sm`}>رؤى ذكية من النظام</h2>
+                  <p className="text-[11px] text-[#6b87ab] truncate">تحليل فوري مبني على بياناتك الحالية</p>
+                </div>
+              </div>
+              <Link href="/ai" className="inline-flex shrink-0 items-center gap-1 text-xs text-cyan-200/90 transition-colors hover:text-cyan-100">
+                عرض جميع الرؤى <ArrowLeft size={14} />
+              </Link>
+            </div>
+
+            <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              {smartInsights.map((ins, i) => (
+                <li key={i} className="flex min-w-0 items-start gap-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3">
+                  <span className={`${ICON_ORB} w-8 h-8 shrink-0 ${TINTS[ins.tint].orb}`}>
+                    <ins.icon size={15} className={TINTS[ins.tint].icon} />
+                  </span>
+                  <p className="min-w-0 text-sm leading-snug text-[#dbe6f7]">{ins.text}</p>
+                </li>
+              ))}
+            </ul>
+
+            {isSuperAdmin && activeEmployeeNames.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-[11px] text-[#8ba3c7]">موظفون نشطون:</span>
+                {activeEmployeeNames.map((name) => (
+                  <span key={name} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/80">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    {name}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {QUICK_ACTIONS.map((a) => (
-              <QuickAction key={a.label} href={a.href} label={a.label} icon={a.icon} tint={a.tint} />
-            ))}
-          </div>
-        </div>
+        </section>
 
         {/* ─── Analytics: performance + task distribution ────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -842,6 +841,19 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* ─── Quick actions ─────────────────────────────────────────────── */}
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className={`${SECTION_TITLE} text-sm`}>إجراءات سريعة</h2>
+            <span className="text-[11px] text-[#6b87ab]">اختصارات لأهم العمليات</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {QUICK_ACTIONS.map((a) => (
+              <QuickAction key={a.label} href={a.href} label={a.label} icon={a.icon} tint={a.tint} />
+            ))}
           </div>
         </div>
 
