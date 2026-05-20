@@ -11,7 +11,7 @@ import {
   Users, CheckCircle2, XCircle, AlertTriangle, Activity, Clock,
   UserCheck, DollarSign, CheckCircle, X, Sparkles, TrendingUp, Timer, Siren,
   Bot, CheckSquare, UserPlus, FileText, Wallet, BarChart3, Gauge, ListChecks,
-  ArrowLeft, ShieldCheck, Building2, CalendarDays,
+  ArrowLeft, ShieldCheck, Building2, CalendarDays, Search, Bell, Menu, Plus,
 } from "lucide-react";
 import { formatCurrency, timeAgo } from "@/lib/utils";
 import { useDashboardKPI, useProjects, useActivities, useTransactions, useEmployees, useClients, useTasks } from "@/hooks/useData";
@@ -440,7 +440,41 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5 sm:space-y-6">
+      <div className="space-y-5 sm:space-y-6 pb-[max(env(safe-area-inset-bottom),1rem)]">
+        {/* ─── Command bar (desktop + compact mobile header) ───────────────────── */}
+        <section className={`${CARD_BASE} p-3 sm:p-4`}>
+          <div className="flex items-center justify-between gap-2 sm:hidden">
+            <button className="h-11 w-11 rounded-xl border border-white/10 bg-white/[0.03] text-[#8ba3c7] inline-flex items-center justify-center">
+              <Menu size={18} />
+            </button>
+            <div className="min-w-0 text-center">
+              <p className="text-[11px] text-[#8ba3c7]">Blumark24 OS</p>
+              <p className="text-sm font-semibold text-white truncate">لوحة القيادة</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="h-11 w-11 rounded-xl border border-white/10 bg-white/[0.03] text-[#8ba3c7] inline-flex items-center justify-center">
+                <Bell size={17} />
+              </button>
+              <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-cyan-400/30 to-violet-500/20 ring-1 ring-white/20 flex items-center justify-center text-white text-sm font-bold">
+                {initials(user?.name ?? "U")}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 sm:mt-0 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <div className="relative min-w-0 flex-1">
+              <Search size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8ba3c7]" />
+              <input readOnly value="بحث ذكي سريع..." className="w-full rounded-xl border border-white/10 bg-white/[0.03] pr-9 pl-3 py-2.5 text-sm text-[#8ba3c7] outline-none" />
+            </div>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/25 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-100">
+                <Bot size={14} /> AI Assistant
+              </span>
+              <button className="h-11 w-11 rounded-full border border-cyan-300/35 bg-cyan-400/10 text-cyan-200 inline-flex items-center justify-center shadow-[0_0_26px_rgba(34,211,238,0.35)]">
+                <Plus size={17} />
+              </button>
+            </div>
+          </div>
+        </section>
 
         {/* ─── Hero: AI insight / welcome banner ─────────────────────────── */}
         <section className={`${SURFACE_PANEL} p-4 sm:p-6 lg:p-7`}>
