@@ -440,8 +440,7 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5 sm:space-y-6">
-
+      <div className="space-y-5 sm:space-y-6 overflow-x-clip pb-[env(safe-area-inset-bottom)]">
         {/* ─── Hero: AI insight / welcome banner ─────────────────────────── */}
         <section className={`${SURFACE_PANEL} p-4 sm:p-6 lg:p-7`}>
           <JellyfishBackground />
@@ -594,8 +593,29 @@ export default function DashboardPage() {
               })}
         </div>
 
+        {/* ─── Smart insights ─────────────────────────────────────────────── */}
+        <section className={`${CARD_BASE} p-4 sm:p-5 shadow-[0_16px_40px_-24px_rgba(34,211,238,0.45)]`}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className={`${SECTION_TITLE} text-sm sm:text-base`}>رؤية ذكية فورية</h2>
+            <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-1 text-[11px] text-cyan-200">
+              <Sparkles size={12} />
+              مباشر
+            </span>
+          </div>
+          <p className="text-sm leading-6 text-[#c7d9f4]">{aiInsight}</p>
+          {isSuperAdmin && activeEmployeeNames.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {activeEmployeeNames.map((name) => (
+                <span key={name} className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-[#9fb6da]">
+                  {name}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* ─── Quick actions ─────────────────────────────────────────────── */}
-        <div>
+        <div className={`${CARD_BASE} p-4 sm:p-5`}>
           <div className="mb-3 flex items-center justify-between">
             <h2 className={`${SECTION_TITLE} text-sm`}>إجراءات سريعة</h2>
             <span className="text-[11px] text-[#6b87ab]">اختصارات لأهم العمليات</span>
