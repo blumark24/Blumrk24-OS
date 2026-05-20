@@ -42,14 +42,17 @@ export type Permission =
 // Flexible labels mapping — keep labels for known internal roles,
 // also include friendly labels for 'admin' / 'manager' strings.
 export const ROLE_LABELS: Record<string, string> = {
-  super_admin:      "مدير أعلى",
-  admin:            "مدير",
-  manager:          "مدير قسم",
-  board_member:     "عضو مجلس الإدارة",
-  defense_manager:  "مدير وكالة الدفاع",
-  attack_manager:   "مدير وكالة الهجوم",
-  finance_manager:  "مدير مالي",
-  employee:         "موظف",
+  super_admin:         "مدير أعلى",
+  board_chairman:      "رئيس مجلس الإدارة",
+  general_manager:     "المدير العام",
+  department_manager:  "مدير القسم",
+  board_member:        "عضو مجلس الإدارة",
+  defense_manager:     "مدير وكالة الدفاع",
+  attack_manager:      "مدير وكالة الهجوم",
+  finance_manager:     "مدير مالي",
+  admin:               "مدير",
+  manager:             "مدير قسم",
+  employee:            "موظف",
 };
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -125,10 +128,13 @@ export function mapAuthRoleToUserRole(role: string): UserRole {
 
   switch (normalizedRole) {
     case "super_admin":
+    case "board_chairman":
+    case "general_manager":
     case "مدير_عام":
       return "super_admin";
     case "admin":
       return "super_admin";
+    case "department_manager":
     case "manager":
     case "مدير_قسم":
       return "defense_manager";
@@ -160,7 +166,12 @@ export interface ManagedUser {
 // ─── Context value ────────────────────────────────────────────────────────[...]
 
 interface PermissionsContextValue {
-  userRole:              UserRole;
+  /**
+   * The current user's effective role.  `null` means we have not yet resolved
+   * a profile for the authenticated user (initial bootstrap, or profile load
+   * error).  Consumers must NOT treat null as "employee".
+   */
+  userRole:              UserRole | null;
   hasPermission:         (perm: Permission) => boolean;
   managedUsers:          ManagedUser[];
   rolePermissions:       Record<UserRole, Permission[]>;
@@ -178,7 +189,7 @@ interface PermissionsContextValue {
 }
 
 const PermissionsContext = createContext<PermissionsContextValue>({
-  userRole:              "employee",
+  userRole:              null,
   hasPermission:         () => false,
   managedUsers:          [],
   rolePermissions:       DEFAULT_ROLE_PERMISSIONS,
@@ -254,18 +265,16 @@ export function PermissionsProvider({ children }: { children: ReactNode }) {
   //    (which reads directly from profiles table by auth user id).
   //    managedUsers is used only for the admin panel — never to determine
   //    the current user's own role, to avoid async race conditions.
-  // Ensure we derive the current user's role ONLY from AuthContext.user.role.
-  const [userRole, setUserRole] = useState<UserRole>(() => mapAuthRoleToUserRole(user?.role ?? ""));
-
-  useEffect(() => {
-    const mappedRole = mapAuthRoleToUserRole(user?.role ?? "");
-    // Temporary development-only debug log
-    console.log("Permissions userRole:", mappedRole);
-    setUserRole(mappedRole);
-  }, [user?.role]);
+  // We deliberately do NOT default to "employee" while AuthContext is still
+  // resolving the profile — that would cause a brief flash of limited
+  // permissions for super_admin on hard refresh.  `null` means "unknown".
+  const userRole: UserRole | null = user?.role
+    ? mapAuthRoleToUserRole(user.role)
+    : null;
 
   const hasPermission = useCallback(
     (perm: Permission) => {
+      if (!userRole) return false;
       if (userRole === "super_admin") return true;
       return (rolePermissions[userRole] ?? []).includes(perm);
     },

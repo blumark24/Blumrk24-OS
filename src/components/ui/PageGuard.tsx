@@ -15,13 +15,12 @@ export default function PageGuard({ permission, children }: PageGuardProps) {
   const { rolePermissions } = usePermissions();
   const { loading, user } = useAuth();
 
-  // While auth is resolving render the dashboard chrome (sidebar + header)
-  // with a per-page skeleton instead of a blank full-viewport spinner.
-  // The chrome is cheap to render and shows the user the app is alive.
-  // We must NOT render protected children before the real role is known,
-  // and we must NOT show the access-denied screen before we know the user
-  // lacks access — both would be wrong (security / UX respectively).
-  if (loading) {
+  // Render the dashboard chrome with a skeleton whenever we don't yet have a
+  // resolved user — initial auth resolution, a redirect to /auth in progress,
+  // or a profile-load error (whose recoverable banner + retry lives in
+  // DashboardLayout).  We must NEVER render protected children before the real
+  // role is known, and never show access-denied before we know access is lacked.
+  if (loading || !user) {
     return (
       <DashboardLayout>
         <div className="space-y-4">
@@ -32,11 +31,9 @@ export default function PageGuard({ permission, children }: PageGuardProps) {
     );
   }
 
-  // Derive role directly from AuthContext.user rather than PermissionsContext
-  // state.  PermissionsContext updates userRole in a useEffect that fires one
-  // render after user.role becomes available, so using it here would cause a
-  // brief access-denied flash for super_admin on hard refresh.
-  const resolvedRole = user ? mapAuthRoleToUserRole(user.role) : "employee";
+  // Derive role directly from AuthContext.user (the single source of truth)
+  // rather than PermissionsContext state, which updates one render later.
+  const resolvedRole = mapAuthRoleToUserRole(user.role);
   const hasPerm =
     resolvedRole === "super_admin" ||
     (rolePermissions[resolvedRole] ?? []).includes(permission);

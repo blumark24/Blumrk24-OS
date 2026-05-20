@@ -27,16 +27,25 @@ export default function AuthPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
     setLoading(true);
-    const result = await login(email, password);
-    setLoading(false);
-    if (!result.ok) {
-      setError(result.error ?? "خطأ في تسجيل الدخول");
-      toast.error(result.error ?? "خطأ في تسجيل الدخول");
-    } else {
-      toast.success("مرحباً! تم تسجيل الدخول بنجاح");
+    try {
+      const result = await login(email, password);
+      if (!result.ok) {
+        setError(result.error ?? "خطأ في تسجيل الدخول");
+        toast.error(result.error ?? "خطأ في تسجيل الدخول");
+      } else {
+        toast.success("مرحباً! تم تسجيل الدخول بنجاح");
+        // On success login() performs the redirect; keep the button in its
+        // loading state so it cannot be re-submitted during navigation.
+        return;
+      }
+    } catch {
+      setError("تعذّر إكمال تسجيل الدخول — حاول مجدداً");
+      toast.error("تعذّر إكمال تسجيل الدخول — حاول مجدداً");
     }
+    setLoading(false);
   };
 
   const handleForgot = async (e: React.FormEvent) => {
