@@ -443,11 +443,11 @@ export default function DashboardPage() {
       <div className="space-y-5 sm:space-y-6">
 
         {/* ─── Hero: AI insight / welcome banner ─────────────────────────── */}
-        <section className={`${SURFACE_PANEL} p-5 sm:p-7`}>
+        <section className={`${SURFACE_PANEL} p-4 sm:p-6 lg:p-7`}>
           <JellyfishBackground />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_88%_-25%,rgba(34,211,238,0.18),transparent_55%),radial-gradient(110%_120%_at_8%_125%,rgba(124,58,237,0.16),transparent_55%)]" />
 
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             {/* Welcome + identity + AI insight */}
             <div className="min-w-0 flex-1">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium text-cyan-200">
@@ -510,7 +510,7 @@ export default function DashboardPage() {
         </section>
 
         {/* ─── KPI cards ─────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           {kpiLoading
             ? Array.from({ length: 4 }).map((_, i) => <KPICardSkeleton key={i} />)
             : kpiCards.map((card, i) => {
@@ -526,7 +526,7 @@ export default function DashboardPage() {
                     <div className={`pointer-events-none absolute inset-0 ${theme.ambient}`} />
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(100%_60%_at_50%_0%,rgba(255,255,255,0.05),transparent_60%)]" />
 
-                    <div className="relative z-10 flex h-full flex-col justify-between p-4 sm:p-5 min-w-0">
+                    <div className="relative z-10 flex h-full flex-col justify-between p-3.5 sm:p-5 min-w-0">
                       {/* Top: live drilldown trigger + icon orb */}
                       <div className="flex items-center justify-between gap-2">
                         <button
@@ -545,14 +545,14 @@ export default function DashboardPage() {
                           </span>
                           <span className="select-none" style={DISABLE_TEXT_SELECT_STYLE}>مباشر</span>
                         </button>
-                        <div className={`${ICON_ORB} w-10 h-10 sm:w-11 sm:h-11 ${theme.orb}`}>
-                          <card.icon size={19} className={card.iconColor} />
+                        <div className={`${ICON_ORB} w-9 h-9 sm:w-11 sm:h-11 ${theme.orb}`}>
+                          <card.icon size={18} className={card.iconColor} />
                         </div>
                       </div>
 
                       {/* Hero number + caption */}
                       <div className="min-w-0">
-                        <div className="font-heading font-bold tracking-tight text-white leading-[0.9] text-[36px] sm:text-[54px] drop-shadow-[0_2px_12px_rgba(0,0,0,0.35)]">
+                        <div className="font-heading font-bold tracking-tight text-white leading-[0.9] text-[clamp(1.85rem,7vw,3.375rem)] drop-shadow-[0_2px_12px_rgba(0,0,0,0.35)]">
                           {card.value}
                         </div>
                         <div className="mt-1.5 truncate text-[12.5px] font-medium text-white/80">{card.label}</div>
@@ -662,7 +662,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ─── Employees by dept + satisfaction + quick summary ──────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className={`${CARD_BASE} p-5`}>
             <div className="mb-5 flex items-center justify-between">
               <h3 className={`${SECTION_TITLE} text-sm`}>الموظفون بالقسم</h3>
@@ -813,8 +813,8 @@ export default function DashboardPage() {
 
         {/* ─── Drilldown modal (unchanged behavior) ──────────────────────── */}
         {activeBoard && (
-          <div className="fixed inset-0 z-50 bg-[#030913]/65 backdrop-blur-md flex items-start sm:items-center justify-center p-3 sm:p-5" dir="rtl">
-            <div className={`w-[calc(100vw-24px)] sm:w-full sm:max-w-4xl rounded-[28px] border bg-[linear-gradient(145deg,rgba(16,29,50,.88),rgba(6,16,30,.9))] backdrop-blur-2xl p-4 sm:p-6 max-h-[82vh] overflow-y-auto mb-20 sm:mb-0 ${BOARD_THEME[activeBoard].panelBorder}`}>
+          <div className="fixed inset-0 z-50 bg-[#030913]/65 backdrop-blur-md flex items-start sm:items-center justify-center px-3 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-5" dir="rtl">
+            <div className={`w-[calc(100vw-24px)] sm:w-full sm:max-w-4xl rounded-[28px] border bg-[linear-gradient(145deg,rgba(16,29,50,.88),rgba(6,16,30,.9))] backdrop-blur-2xl p-4 sm:p-6 max-h-[82dvh] overflow-y-auto ${BOARD_THEME[activeBoard].panelBorder}`}>
               <div className="flex items-start justify-between mb-5 gap-3">
                 <div className="flex items-start gap-3 min-w-0">
                   <div className={`w-11 h-11 rounded-2xl border flex items-center justify-center ${BOARD_THEME[activeBoard].iconTile}`}>
