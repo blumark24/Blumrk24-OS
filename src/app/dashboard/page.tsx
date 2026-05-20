@@ -11,7 +11,7 @@ import {
   Users, CheckCircle2, XCircle, AlertTriangle, Activity, Clock,
   UserCheck, DollarSign, CheckCircle, X, Sparkles, TrendingUp, Timer, Siren,
   Bot, CheckSquare, UserPlus, FileText, Wallet, BarChart3, ListChecks,
-  ArrowLeft, ShieldCheck, Building2, CalendarDays, Heart, Zap, Home, Plus, MoreHorizontal,
+  ArrowLeft, ShieldCheck, Building2, Zap, Home, Plus, MoreHorizontal,
 } from "lucide-react";
 import { formatCurrency, timeAgo } from "@/lib/utils";
 import { useDashboardKPI, useProjects, useActivities, useTransactions, useEmployees, useClients, useTasks } from "@/hooks/useData";
@@ -125,18 +125,20 @@ type TintKey = keyof typeof TINTS;
 
 // ─── Small presentational helpers (dashboard-scoped) ─────────────────────────────
 
+// Compact, content-sized hero metric chip. Labels/values never wrap or clip;
+// the parent flex-wraps whole chips instead of truncating Arabic text.
 function StatPill({ icon: Icon, label, value, tint }: {
   icon: React.ElementType; label: string; value: string; tint: TintKey;
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3 min-w-0">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className={`${ICON_ORB} w-8 h-8 shrink-0 ${TINTS[tint].orb}`}>
-          <Icon size={15} className={TINTS[tint].icon} />
-        </span>
-        <span className="text-[11px] text-[#8ba3c7] truncate">{label}</span>
+    <div className="inline-flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5">
+      <span className={`${ICON_ORB} w-7 h-7 shrink-0 ${TINTS[tint].orb}`}>
+        <Icon size={13} className={TINTS[tint].icon} />
+      </span>
+      <div className="leading-tight">
+        <div className="whitespace-nowrap text-[10px] text-[#8ba3c7]">{label}</div>
+        <div className="whitespace-nowrap text-[13px] font-bold text-white">{value}</div>
       </div>
-      <div className="mt-2 text-base sm:text-lg font-bold text-white truncate">{value}</div>
     </div>
   );
 }
@@ -352,10 +354,9 @@ export default function DashboardPage() {
   if (kpi.activeClients > 0)
     smartInsights.push({ icon: Users,        tint: "cyan",    text: `يوجد ${kpi.activeClients} عميل نشط حالياً.` });
 
-  // Qualitative hero metrics — derived ONLY from existing KPI values (no fabricated numbers).
-  const overallHealth   = kpi.overdueTasks === 0 && kpi.completedTasksPct >= 70
-    ? "ممتازة"
-    : kpi.completedTasksPct >= 50 ? "جيدة" : kpi.completedTasksPct > 0 ? "متوسطة" : "—";
+  // Business-relevant hero metrics — derived ONLY from existing KPI values (no fabricated numbers).
+  const operationalStatus = kpi.overdueTasks > 0 ? "يتطلب متابعة" : "مستقر";
+  const operationalTint: TintKey = kpi.overdueTasks > 0 ? "amber" : "emerald";
   const teamPerformance = kpi.completedTasksPct >= 80
     ? "ممتاز"
     : kpi.completedTasksPct >= 50 ? "جيد" : kpi.completedTasksPct > 0 ? "متوسط" : "—";
@@ -469,29 +470,21 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5 sm:space-y-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-6">
-        {/* ─── Hero: AI insight / welcome banner ─────────────────────────── */}
-        <section className={`${SURFACE_PANEL} p-4 sm:p-6 lg:p-7`}>
+      <div className="space-y-5 sm:space-y-6 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-6">
+        {/* ─── Hero: welcome banner ──────────────────────────────────────── */}
+        <section className={`${SURFACE_PANEL} p-4 sm:p-5 lg:p-6`}>
           <JellyfishBackground />
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_88%_-25%,rgba(34,211,238,0.18),transparent_55%),radial-gradient(110%_120%_at_8%_125%,rgba(124,58,237,0.16),transparent_55%)]" />
 
-          <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             {/* Welcome + identity + live status metrics (right side on desktop) */}
             <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium text-cyan-200">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-cyan-300 opacity-60 animate-ping" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300" />
-                </span>
-                نظام بلومارك الذكي • مباشر
-              </div>
-
-              <h1 className="mt-3 text-2xl sm:text-3xl font-heading font-bold text-white">مرحباً بك 👋</h1>
-              <p className="mt-1 truncate text-lg sm:text-xl font-bold bg-gradient-to-l from-cyan-200 via-sky-200 to-blue-300 bg-clip-text text-transparent">
+              <p className="text-sm text-[#8ba3c7]">مرحباً بك 👋</p>
+              <h1 className="mt-0.5 truncate text-xl sm:text-2xl font-heading font-bold text-white">
                 {user?.name ?? "..."}
-              </p>
+              </h1>
 
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-[#8ba3c7]">
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#8ba3c7]">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{todayArabic()}
                 </span>
@@ -501,11 +494,11 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              {/* Three compact live metrics (derived from existing data only) */}
-              <div className="mt-4 grid max-w-md grid-cols-3 gap-2 sm:gap-3">
-                <StatPill icon={Zap}        label="أداء الفريق"  value={teamPerformance}              tint="emerald" />
-                <StatPill icon={TrendingUp} label="معدل الإنجاز" value={`${kpi.completedTasksPct}%`}  tint="cyan"    />
-                <StatPill icon={Heart}      label="الصحة العامة" value={overallHealth}                tint="rose"    />
+              {/* Three compact live metrics (derived from existing data only; chips wrap, never clip) */}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <StatPill icon={Zap}        label="أداء الفريق"  value={teamPerformance}             tint="emerald"       />
+                <StatPill icon={TrendingUp} label="الإنجاز"      value={`${kpi.completedTasksPct}%`} tint="cyan"          />
+                <StatPill icon={Activity}   label="حالة التشغيل" value={operationalStatus}           tint={operationalTint} />
               </div>
             </div>
 
@@ -542,16 +535,12 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={i}
-                    className={`${CARD_BASE} group w-full aspect-square transition-shadow duration-300 ${theme.glow}`}
+                    className={`${CARD_BASE} group w-full min-h-[150px] sm:min-h-[180px] transition-shadow duration-300 ${theme.glow}`}
                   >
                     <div className={`pointer-events-none absolute inset-0 ${theme.ambient}`} />
                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(100%_60%_at_50%_0%,rgba(255,255,255,0.05),transparent_60%)]" />
-                    {/* Decorative ambient accent (not data) */}
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-9 opacity-[0.22]">
-                      <Sparkline colorClass={theme.iconColor} />
-                    </div>
 
-                    <div className="relative z-10 flex h-full flex-col justify-between p-3.5 sm:p-5 min-w-0">
+                    <div className="relative z-10 flex h-full flex-col justify-between gap-3 p-3.5 sm:p-4 min-w-0">
                       {/* Top: live drilldown trigger + icon orb */}
                       <div className="flex items-center justify-between gap-2">
                         <button
@@ -584,34 +573,39 @@ export default function DashboardPage() {
                         <div className="truncate text-[10.5px] text-white/40">{card.subtitle}</div>
                       </div>
 
-                      {/* Footer: single clean live insight */}
-                      <div className="min-w-0 text-[11px]">
-                        {card.key === "activeClients" && (
-                          <div className={`flex items-center gap-1.5 ${theme.accent}`}>
-                            <TrendingUp size={13} className="shrink-0" />
-                            <span className="truncate">{latestClient ? `آخر عميل: ${latestClient.name}` : "لا يوجد عميل جديد"}</span>
-                          </div>
-                        )}
-                        {card.key === "completedTasks" && (
-                          <div className={`flex items-center gap-1.5 ${theme.accent}`}>
-                            <CheckCircle2 size={13} className="shrink-0" />
-                            <span className="truncate">معدل إنجاز مستقر اليوم</span>
-                          </div>
-                        )}
-                        {card.key === "incompleteTasks" && (
-                          <div className={`flex items-center gap-2 ${theme.accent}`}>
-                            <div className="h-1.5 w-12 shrink-0 rounded-full bg-white/10 overflow-hidden">
-                              <div className="h-full rounded-full bg-amber-300/80" style={{ width: `${Math.min(100, Math.max(8, (kpi.incompleteTasks / Math.max(tasks.length, 1)) * 100))}%` }} />
+                      {/* Footer: live insight (left) + small accent sparkline (right) */}
+                      <div className="flex items-end justify-between gap-2 min-w-0">
+                        <div className="min-w-0 flex-1 text-[11px]">
+                          {card.key === "activeClients" && (
+                            <div className={`flex items-center gap-1.5 ${theme.accent}`}>
+                              <TrendingUp size={13} className="shrink-0" />
+                              <span className="truncate">{latestClient ? `آخر عميل: ${latestClient.name}` : "لا يوجد عميل جديد"}</span>
                             </div>
-                            <span className="truncate">متبقي {kpi.incompleteTasks} من {tasks.length || 0}</span>
-                          </div>
-                        )}
-                        {card.key === "overdueTasks" && (
-                          <div className={`flex items-center gap-1.5 ${theme.accent}`}>
-                            <Siren size={13} className="shrink-0" />
-                            <span className="truncate">{kpi.overdueTasks > 0 ? "تتطلب متابعة فورية" : "لا يوجد تعثر حرج"}</span>
-                          </div>
-                        )}
+                          )}
+                          {card.key === "completedTasks" && (
+                            <div className={`flex items-center gap-1.5 ${theme.accent}`}>
+                              <CheckCircle2 size={13} className="shrink-0" />
+                              <span className="truncate">معدل إنجاز مستقر اليوم</span>
+                            </div>
+                          )}
+                          {card.key === "incompleteTasks" && (
+                            <div className={`flex items-center gap-2 ${theme.accent}`}>
+                              <div className="h-1.5 w-12 shrink-0 rounded-full bg-white/10 overflow-hidden">
+                                <div className="h-full rounded-full bg-amber-300/80" style={{ width: `${Math.min(100, Math.max(8, (kpi.incompleteTasks / Math.max(tasks.length, 1)) * 100))}%` }} />
+                              </div>
+                              <span className="truncate">متبقي {kpi.incompleteTasks} من {tasks.length || 0}</span>
+                            </div>
+                          )}
+                          {card.key === "overdueTasks" && (
+                            <div className={`flex items-center gap-1.5 ${theme.accent}`}>
+                              <Siren size={13} className="shrink-0" />
+                              <span className="truncate">{kpi.overdueTasks > 0 ? "تتطلب متابعة فورية" : "لا يوجد تعثر حرج"}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="h-5 w-12 shrink-0 opacity-50">
+                          <Sparkline colorClass={theme.iconColor} />
+                        </div>
                       </div>
                     </div>
                   </div>
