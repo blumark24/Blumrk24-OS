@@ -1,459 +1,270 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import PageGuard from "@/components/ui/PageGuard";
+import { useEmployees } from "@/hooks/useData";
 import {
-  Network, Shield, Swords, Users, ChevronDown,
-  Plus, Pencil, Trash2, X, Save, UserCheck, Mail,
-  Phone, Briefcase, AlertCircle,
+  Network,
+  Building2,
+  GitBranch,
+  Layers3,
+  FolderTree,
+  Users,
+  UserCheck,
+  Sparkles,
+  ShieldCheck,
 } from "lucide-react";
-import { usePermissions } from "@/contexts/PermissionsContext";
-import { useToast } from "@/contexts/ToastContext";
-import { useBoardMembers } from "@/hooks/useData";
-import type { BoardMember } from "@/lib/db";
 
-const MAX_BOARD = 3;
+type NodeKind = "board" | "agency" | "directorate" | "section" | "team";
 
-// ─── Static dept data ─────────────────────────────────────────────────────────
+type OrgNode = {
+  id: string;
+  name: string;
+  kind: NodeKind;
+  children?: OrgNode[];
+};
 
-const DEFENSE_DEPTS = [
-  { name: "الإدارة",  icon: "🏢", desc: "إدارة الشؤون الداخلية"     },
-  { name: "العمليات", icon: "⚙️", desc: "تشغيل وإدارة الأنظمة"      },
-  { name: "المالي",   icon: "💰", desc: "الحسابات والخزينة"           },
-  { name: "الإبداع",  icon: "✨", desc: "الأفكار والمحتوى"           },
-  { name: "التصميم",  icon: "🎨", desc: "الهوية البصرية"             },
-  { name: "الحملات",  icon: "📣", desc: "التسويق الداخلي"            },
-  { name: "AI Lab",   icon: "🤖", desc: "أبحاث الذكاء الاصطناعي"     },
+const HIERARCHY_TEXT = "مجلس الإدارة → الوكالات → الإدارات → الأقسام → الفرق → الموظفون";
+
+const ORG_PLACEHOLDER_TREE: OrgNode[] = [
+  {
+    id: "board",
+    name: "مجلس الإدارة",
+    kind: "board",
+    children: [
+      {
+        id: "agency-defense",
+        name: "وكالة الدفاع",
+        kind: "agency",
+        children: [
+          {
+            id: "dir-ops",
+            name: "إدارة العمليات",
+            kind: "directorate",
+            children: [
+              {
+                id: "sec-ops",
+                name: "قسم التشغيل",
+                kind: "section",
+                children: [
+                  { id: "team-ops-1", name: "فريق تشغيل 1", kind: "team" },
+                  { id: "team-ops-2", name: "فريق تشغيل 2", kind: "team" },
+                ],
+              },
+            ],
+          },
+          {
+            id: "dir-tech",
+            name: "إدارة التقنية",
+            kind: "directorate",
+            children: [
+              {
+                id: "sec-ai",
+                name: "قسم الذكاء الاصطناعي",
+                kind: "section",
+                children: [{ id: "team-ai", name: "فريق AI", kind: "team" }],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: "agency-attack",
+        name: "وكالة الهجوم",
+        kind: "agency",
+        children: [
+          {
+            id: "dir-growth",
+            name: "إدارة النمو",
+            kind: "directorate",
+            children: [
+              {
+                id: "sec-campaigns",
+                name: "قسم الحملات",
+                kind: "section",
+                children: [{ id: "team-camp", name: "فريق الحملات", kind: "team" }],
+              },
+            ],
+          },
+          {
+            id: "dir-clients",
+            name: "إدارة العملاء",
+            kind: "directorate",
+            children: [
+              {
+                id: "sec-support",
+                name: "قسم خدمة العملاء",
+                kind: "section",
+                children: [{ id: "team-support", name: "فريق خدمة العملاء", kind: "team" }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ];
 
-const OFFENSE_DEPTS = [
-  { name: "العملاء CRM",       icon: "👥", desc: "إدارة علاقات العملاء"  },
-  { name: "المبيعات",           icon: "📈", desc: "تنمية الإيرادات"       },
-  { name: "الشراكات",          icon: "🤝", desc: "التوسع والتحالفات"      },
-  { name: "خدمة العملاء",      icon: "🎧", desc: "دعم ومتابعة العملاء"   },
-  { name: "المتابعة",           icon: "📋", desc: "تتبع الطلبات والعقود"   },
-  { name: "العلاقات التجارية", icon: "💼", desc: "بناء شبكة الأعمال"     },
-];
+const NODE_META: Record<NodeKind, { label: string; color: string; icon: React.ElementType }> = {
+  board: { label: "مجلس الإدارة", color: "#22d3ee", icon: Building2 },
+  agency: { label: "الوكالات", color: "#8b5cf6", icon: Network },
+  directorate: { label: "الإدارات", color: "#3b82f6", icon: Layers3 },
+  section: { label: "الأقسام", color: "#10b981", icon: FolderTree },
+  team: { label: "الفرق", color: "#f59e0b", icon: GitBranch },
+};
 
-// ─── Board Member Modal ───────────────────────────────────────────────────────
-
-const EMPTY_FORM = { name: "", role: "", email: "", phone: "", status: "نشط" as BoardMember["status"] };
-
-function BoardMemberModal({
-  member,
-  onSave,
-  onClose,
-}: {
-  member: BoardMember | null;
-  onSave: (data: Omit<BoardMember, "id">) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [form,   setForm]   = useState(
-    member
-      ? { name: member.name, role: member.role, email: member.email, phone: member.phone, status: member.status }
-      : EMPTY_FORM
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-[#21486f] bg-[#0f263f]/70 px-3 py-2 text-center">
+      <p className="text-lg font-bold text-white">{value}</p>
+      <p className="text-[11px] text-[#8ba3c7]">{label}</p>
+    </div>
   );
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
+}
 
-  const validate = () => {
-    const e: Record<string, string> = {};
-    if (!form.name.trim()) e.name = "الاسم مطلوب";
-    if (!form.role.trim()) e.role = "المنصب مطلوب";
-    return e;
-  };
-
-  const handleSave = async () => {
-    const e = validate();
-    if (Object.keys(e).length) { setErrors(e); return; }
-    setSaving(true);
-    try {
-      await onSave(form);
-    } finally {
-      setSaving(false);
-    }
-  };
+function TreeNode({ node, depth = 0 }: { node: OrgNode; depth?: number }) {
+  const meta = NODE_META[node.kind];
+  const Icon = meta.icon;
+  const hasChildren = Boolean(node.children?.length);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
-      <div className="relative w-full max-w-md glass-card p-6 space-y-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-white font-heading font-bold text-lg flex items-center gap-2">
-            <UserCheck size={18} className="text-[#22d3ee]" />
-            {member ? "تعديل عضو مجلس الإدارة" : "إضافة عضو جديد"}
-          </h3>
-          <button onClick={onClose} className="text-[#8ba3c7] hover:text-white transition-colors">
-            <X size={18} />
-          </button>
+    <li className="w-full min-w-0">
+      <div
+        className="rounded-2xl border p-3 sm:p-4"
+        style={{
+          borderColor: `${meta.color}66`,
+          background: "linear-gradient(135deg, rgba(10,22,40,0.92), rgba(12,31,54,0.68))",
+          boxShadow: `0 8px 26px -16px ${meta.color}3a`,
+          backdropFilter: "blur(10px)",
+        }}
+      >
+        <div className="flex items-start justify-between gap-3 min-w-0">
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-xs text-[#8ba3c7]">{meta.label}</p>
+            <h3 className="text-sm sm:text-base text-white font-semibold leading-relaxed break-words">{node.name}</h3>
+          </div>
+          <span className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${meta.color}24`, color: meta.color }}>
+            <Icon size={15} />
+          </span>
         </div>
+      </div>
 
-        <div>
-          <label className="block text-xs text-[#8ba3c7] mb-1.5">الاسم الكامل *</label>
-          <input className="input-dark text-sm" placeholder="مثال: عبدالله الشهري" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name}</p>}
-        </div>
-
-        <div>
-          <label className="block text-xs text-[#8ba3c7] mb-1.5">المنصب *</label>
-          <select className="input-dark text-sm" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-            <option value="">-- اختر المنصب --</option>
-            <option>رئيس مجلس الإدارة</option>
-            <option>نائب الرئيس</option>
-            <option>عضو مجلس الإدارة</option>
-            <option>أمين السر</option>
-            <option>مستشار</option>
-          </select>
-          {errors.role && <p className="text-red-400 text-xs mt-1">{errors.role}</p>}
-        </div>
-
-        <div>
-          <label className="block text-xs text-[#8ba3c7] mb-1.5 flex items-center gap-1">
-            <Mail size={11} />
-            البريد الإلكتروني
-          </label>
-          <input type="email" className="input-dark text-sm" placeholder="example@blumark24.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        </div>
-
-        <div>
-          <label className="block text-xs text-[#8ba3c7] mb-1.5 flex items-center gap-1">
-            <Phone size={11} />
-            رقم الجوال
-          </label>
-          <input type="tel" className="input-dark text-sm" placeholder="05XXXXXXXX" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-        </div>
-
-        <div>
-          <label className="block text-xs text-[#8ba3c7] mb-1.5">الحالة</label>
-          <div className="flex gap-3">
-            {(["نشط", "غير نشط"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setForm({ ...form, status: s })}
-                className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-all ${form.status === s ? s === "نشط" ? "border-emerald-500 bg-emerald-500/10 text-emerald-400" : "border-red-500/50 bg-red-500/10 text-red-400" : "border-[#1e3a5f] text-[#8ba3c7] hover:text-white"}`}
-              >
-                {s}
-              </button>
+      {hasChildren && (
+        <>
+          <div className="h-5 w-px bg-[#2c4d73] mx-auto my-1" />
+          <ul className={`grid gap-2 sm:gap-3 w-full ${depth < 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
+            {node.children!.map((child) => (
+              <TreeNode key={child.id} node={child} depth={depth + 1} />
             ))}
-          </div>
-        </div>
-
-        <div className="flex gap-3 pt-2">
-          <button onClick={onClose} disabled={saving} className="btn-secondary flex-1 py-2 text-sm">إلغاء</button>
-          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 py-2 text-sm flex items-center justify-center gap-2 disabled:opacity-50">
-            {saving
-              ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              : <Save size={14} />
-            }
-            {saving ? "جارٍ الحفظ..." : "حفظ"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DeleteConfirmModal({ name, onConfirm, onClose }: { name: string; onConfirm: () => void; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
-      <div className="glass-card p-6 max-w-sm w-full text-center space-y-4">
-        <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto">
-          <Trash2 size={24} className="text-red-400" />
-        </div>
-        <div>
-          <h3 className="text-white font-heading font-bold text-lg">تأكيد الحذف</h3>
-          <p className="text-[#8ba3c7] text-sm mt-2">
-            هل أنت متأكد من حذف <span className="text-white font-medium">{name}</span> من مجلس الإدارة؟
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button onClick={onClose} className="btn-secondary flex-1 py-2 text-sm">إلغاء</button>
-          <button onClick={onConfirm} className="flex-1 py-2 rounded-xl text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-colors">حذف</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BoardCard({
-  member, canManage, onEdit, onDelete,
-}: {
-  member: BoardMember; canManage: boolean; onEdit: () => void; onDelete: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-2 px-4 py-4 rounded-2xl border border-[#22d3ee]/30 bg-[#22d3ee]/10 text-center min-w-[140px] relative group">
-      {canManage && (
-        <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={onEdit} className="w-6 h-6 rounded-lg bg-[#22d3ee]/20 hover:bg-[#22d3ee]/40 flex items-center justify-center transition-colors" title="تعديل">
-            <Pencil size={11} className="text-[#22d3ee]" />
-          </button>
-          <button onClick={onDelete} className="w-6 h-6 rounded-lg bg-red-500/20 hover:bg-red-500/40 flex items-center justify-center transition-colors" title="حذف">
-            <Trash2 size={11} className="text-red-400" />
-          </button>
-        </div>
+          </ul>
+        </>
       )}
-      <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0" style={{ background: "linear-gradient(135deg,#22d3ee,#1e6fd9)" }}>
-        {member.name.slice(0, 2)}
-      </div>
-      <div>
-        <div className="text-white text-sm font-medium leading-tight">{member.name}</div>
-        <div className="text-[#22d3ee] text-[11px] mt-0.5">{member.role}</div>
-        {member.email && (
-          <div className="text-[#4a6a99] text-[10px] mt-0.5 flex items-center justify-center gap-1">
-            <Mail size={9} />
-            {member.email}
-          </div>
-        )}
-        {member.phone && (
-          <div className="text-[#4a6a99] text-[10px] mt-0.5 flex items-center justify-center gap-1">
-            <Phone size={9} />
-            {member.phone}
-          </div>
-        )}
-      </div>
-      <span className={`badge text-[10px] ${member.status === "نشط" ? "status-active" : "status-inactive"}`}>
-        {member.status}
-      </span>
-    </div>
+    </li>
   );
 }
-
-function DeptCard({ name, icon, desc, accentColor }: { name: string; icon: string; desc: string; accentColor: string }) {
-  return (
-    <div className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-center transition-all hover:-translate-y-0.5"
-      style={{ background: `${accentColor}10`, borderColor: `${accentColor}30` }}>
-      <span className="text-xl">{icon}</span>
-      <div className="text-white text-xs font-medium">{name}</div>
-      <div className="text-[10px] leading-tight" style={{ color: `${accentColor}99` }}>{desc}</div>
-    </div>
-  );
-}
-
-function AgencyBlock({ title, subtitle, icon: Icon, accentColor, depts, description }: {
-  title: string; subtitle: string; icon: React.ElementType;
-  accentColor: string; depts: typeof DEFENSE_DEPTS; description: string;
-}) {
-  return (
-    <div className="flex-1 rounded-2xl border p-5 flex flex-col gap-4"
-      style={{ background: `${accentColor}08`, borderColor: `${accentColor}25`, backdropFilter: "blur(12px)" }}>
-      <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
-          style={{ background: `linear-gradient(135deg,${accentColor},${accentColor}99)` }}>
-          <Icon size={20} className="text-white" />
-        </div>
-        <div>
-          <div className="text-white font-heading font-bold text-base">{title}</div>
-          <div className="text-[11px] mt-0.5" style={{ color: accentColor }}>{subtitle}</div>
-        </div>
-      </div>
-      <p className="text-xs text-[#8ba3c7] leading-relaxed border-t border-[#1e3a5f]/60 pt-3">{description}</p>
-      <div className="flex justify-center">
-        <div className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full"
-          style={{ background: `${accentColor}15`, color: accentColor }}>
-          <Users size={11} />
-          <span>الأقسام التابعة ({depts.length})</span>
-        </div>
-      </div>
-      <div className="grid grid-cols-3 lg:grid-cols-4 gap-2">
-        {depts.map((dept) => <DeptCard key={dept.name} {...dept} accentColor={accentColor} />)}
-      </div>
-    </div>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function OrgPage() {
-  const { hasPermission, userRole } = usePermissions();
-  const toast = useToast();
-  const canManage = userRole === "super_admin";
+  const { data: employees, loading } = useEmployees();
 
-  const { data: boardMembers, insert, update, remove } = useBoardMembers();
-  const [showModal,    setShowModal]    = useState(false);
-  const [editMember,   setEditMember]   = useState<BoardMember | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<BoardMember | null>(null);
+  const employeesByDepartment = React.useMemo(() => {
+    const map = new Map<string, { total: number; active: number }>();
+    employees.forEach((emp) => {
+      const dept = (emp.department || "غير محدد").trim() || "غير محدد";
+      const current = map.get(dept) ?? { total: 0, active: 0 };
+      const next = {
+        total: current.total + 1,
+        active: current.active + (emp.status === "نشط" ? 1 : 0),
+      };
+      map.set(dept, next);
+    });
+    return Array.from(map.entries())
+      .map(([department, counts]) => ({ department, ...counts }))
+      .sort((a, b) => b.total - a.total);
+  }, [employees]);
 
-  const handleOpenAdd = () => {
-    if (boardMembers.length >= MAX_BOARD) {
-      toast.error(`لا يمكن إضافة أكثر من ${MAX_BOARD} أعضاء في مجلس الإدارة`);
-      return;
-    }
-    setEditMember(null);
-    setShowModal(true);
-  };
-
-  const handleSave = useCallback(async (data: Omit<BoardMember, "id">): Promise<void> => {
-    try {
-      if (editMember) {
-        await update(editMember.id, data);
-        toast.success(`تم تحديث بيانات ${data.name} بنجاح`);
-      } else {
-        await insert(data);
-        toast.success(`تمت إضافة ${data.name} إلى مجلس الإدارة`);
-      }
-      setShowModal(false);
-      setEditMember(null);
-    } catch (err) {
-      toast.error("حدث خطأ أثناء حفظ البيانات");
-      console.error("[Board Member Save Error]", err);
-      throw err;
-    }
-  }, [editMember, insert, update, toast]);
-
-  const handleDelete = useCallback(async () => {
-    if (!deleteTarget) return;
-    try {
-      await remove(deleteTarget.id);
-      toast.success(`تم حذف ${deleteTarget.name} من مجلس الإدارة`);
-      setDeleteTarget(null);
-    } catch {
-      toast.error("حدث خطأ أثناء الحذف");
-    }
-  }, [deleteTarget, remove, toast]);
+  const activeEmployees = React.useMemo(
+    () => employees.filter((emp) => emp.status === "نشط").length,
+    [employees],
+  );
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8 max-w-5xl mx-auto">
-        {/* Page header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-heading font-bold text-white flex items-center gap-2">
-              <Network size={24} className="text-[#22d3ee]" />
-              الهيكل الإداري
-            </h1>
-            <p className="text-[#8ba3c7] text-sm mt-1">المخطط التنظيمي لشركة Blumark24</p>
-          </div>
-          {canManage && (
-            <button onClick={handleOpenAdd} className="btn-primary flex items-center gap-2 text-sm" title={boardMembers.length >= MAX_BOARD ? "الحد الأقصى 3 أعضاء" : "إضافة عضو"}>
-              <Plus size={16} />
-              إضافة عضو مجلس
-            </button>
-          )}
-        </div>
-
-        {canManage && boardMembers.length >= MAX_BOARD && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm">
-            <AlertCircle size={15} />
-            مجلس الإدارة مكتمل — الحد الأقصى {MAX_BOARD} أعضاء
-          </div>
-        )}
-
-        {/* Level 1: Board */}
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-full rounded-2xl border p-5"
-            style={{ background: "rgba(34,211,238,0.07)", borderColor: "rgba(34,211,238,0.3)", backdropFilter: "blur(12px)" }}>
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg,#22d3ee,#1e6fd9)" }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L3 7v10l9 5 9-5V7L12 2z" fill="white" fillOpacity="0.9" />
-                </svg>
+    <PageGuard permission="view_dashboard">
+      <DashboardLayout>
+        <main className="space-y-5 sm:space-y-6 overflow-x-hidden" dir="rtl">
+          <section className="rounded-2xl border border-[#1f4168] bg-[linear-gradient(135deg,rgba(10,22,40,0.96),rgba(12,31,54,0.74))] p-4 sm:p-6 shadow-[0_22px_60px_-40px_rgba(34,211,238,0.4)]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h1 className="text-xl sm:text-2xl font-heading font-bold text-white flex items-center gap-2">
+                  <Network size={22} className="text-[#22d3ee]" />
+                  الهيكل التنظيمي
+                </h1>
+                <p className="text-xs sm:text-sm text-[#8ba3c7] mt-1 leading-relaxed">{HIERARCHY_TEXT}</p>
               </div>
-              <div className="text-center">
-                <div className="text-white font-heading font-bold text-lg">مجلس الإدارة</div>
-                <div className="text-[#22d3ee] text-xs">Board of Directors · {boardMembers.length}/{MAX_BOARD} أعضاء</div>
-              </div>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border border-[#22d3ee]/30 bg-[#22d3ee]/10 text-[#22d3ee] text-[11px] sm:text-xs w-fit">
+                <Sparkles size={12} />
+                نموذج هيكل تنظيمي — المرحلة الأولى
+              </span>
             </div>
+          </section>
 
-            {boardMembers.length === 0 ? (
-              <div className="text-center py-8">
-                <Briefcase size={32} className="text-[#4a6a99] mx-auto mb-3" />
-                <p className="text-[#8ba3c7] text-sm">لا يوجد أعضاء حتى الآن</p>
-                {canManage && (
-                  <button onClick={handleOpenAdd} className="btn-primary mt-3 text-sm px-4 py-2 flex items-center gap-2 mx-auto">
-                    <Plus size={14} />
-                    إضافة أول عضو
-                  </button>
-                )}
+          <section className="rounded-2xl border border-[#1f4168] bg-[#0c1f36]/80 p-4 sm:p-5 overflow-x-hidden">
+            <h2 className="text-sm sm:text-base text-white font-semibold mb-3">التسلسل الهرمي</h2>
+            {ORG_PLACEHOLDER_TREE.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[#2a4c75] bg-[#0a1628]/50 p-6 text-center text-[#8ba3c7] text-sm">
+                لا توجد بيانات هيكل تنظيمي متاحة حالياً.
               </div>
             ) : (
-              <div className="flex flex-wrap justify-center gap-3">
-                {boardMembers.map((m) => (
-                  <BoardCard
-                    key={m.id}
-                    member={m}
-                    canManage={canManage}
-                    onEdit={() => { setEditMember(m); setShowModal(true); }}
-                    onDelete={() => setDeleteTarget(m)}
-                  />
+              <ul className="space-y-1 w-full">
+                {ORG_PLACEHOLDER_TREE.map((node) => (
+                  <TreeNode key={node.id} node={node} />
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-2xl border border-[#1f4168] bg-[#0c1f36]/80 p-4 sm:p-5">
+            <h2 className="text-sm sm:text-base text-white font-semibold mb-3">توزيع الموظفين</h2>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+              <StatCard label="إجمالي الموظفين" value={employees.length} />
+              <StatCard label="الموظفون النشطون" value={activeEmployees} />
+              <StatCard label="عدد الأقسام الحالية" value={employeesByDepartment.length} />
+            </div>
+
+            <h3 className="text-xs sm:text-sm text-[#8ba3c7] mb-2">عدد الموظفين حسب الإدارة الحالية</h3>
+            {loading ? (
+              <p className="text-sm text-[#8ba3c7]">جارٍ تحميل بيانات الموظفين...</p>
+            ) : employeesByDepartment.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[#2a4c75] bg-[#0a1628]/50 p-6 text-center text-[#8ba3c7] text-sm">
+                لا توجد بيانات موظفين حالياً لعرض توزيع الأقسام الحالية.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {employeesByDepartment.map((item) => (
+                  <article key={item.department} className="rounded-xl border border-[#25496f] bg-[#102742]/70 px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm text-white break-words">{item.department}</p>
+                      <p className="text-xs text-[#8ba3c7]">{item.total} موظف</p>
+                    </div>
+                    <p className="text-[11px] text-[#6fa8d9] mt-1 flex items-center gap-1">
+                      <UserCheck size={12} />
+                      النشطون: {item.active}
+                    </p>
+                  </article>
                 ))}
               </div>
             )}
-          </div>
+          </section>
 
-          <div className="flex flex-col items-center gap-0">
-            <div className="w-0.5 h-6 bg-gradient-to-b from-[#22d3ee] to-[#1e6fd9]" />
-            <ChevronDown size={16} className="text-[#22d3ee]" />
-          </div>
-
-          <div className="text-xs text-[#8ba3c7] bg-[#1a3356]/50 px-3 py-1 rounded-full border border-[#1e3a5f]">
-            وكالتان رئيسيتان
-          </div>
-
-          <div className="relative w-full flex justify-center">
-            <div className="absolute top-0 left-1/4 right-1/4 h-0.5 bg-gradient-to-r from-[#1e6fd9] via-[#22d3ee]/40 to-[#ff7a3d]" />
-            <div className="flex justify-between w-1/2 pt-0">
-              <ChevronDown size={16} className="text-[#1e6fd9]" />
-              <ChevronDown size={16} className="text-[#ff7a3d]" />
-            </div>
-          </div>
-        </div>
-
-        {/* Level 2: Two agencies */}
-        <div className="flex flex-col lg:flex-row gap-5">
-          <AgencyBlock
-            title="وكالة الدفاع"
-            subtitle="شؤون الشركة الداخلية"
-            icon={Shield}
-            accentColor="#1e6fd9"
-            depts={DEFENSE_DEPTS}
-            description="مسؤولة عن شؤون الشركة الداخلية، إدارة ماركتين الشركة، التسويق الداخلي وإدارة العلامة التجارية، وجميع الأقسام التشغيلية والإبداعية."
-          />
-          <AgencyBlock
-            title="وكالة الهجوم"
-            subtitle="شؤون الشركة الخارجية"
-            icon={Swords}
-            accentColor="#ff7a3d"
-            depts={OFFENSE_DEPTS}
-            description="مسؤولة عن شؤون الشركة الخارجية، اكتساب العملاء والمبيعات والتوسع، وإدارة جميع العلاقات التجارية والشراكات الاستراتيجية."
-          />
-        </div>
-
-        {/* Legend */}
-        <div className="glass-card p-4">
-          <div className="flex flex-wrap items-center gap-6 text-xs text-[#8ba3c7]">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[#22d3ee]" />
-              <span>مجلس الإدارة</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[#1e6fd9]" />
-              <span>وكالة الدفاع (داخلي)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[#ff7a3d]" />
-              <span>وكالة الهجوم (خارجي)</span>
-            </div>
-            <div className="mr-auto text-[11px]">
-              إجمالي الأقسام: {DEFENSE_DEPTS.length + OFFENSE_DEPTS.length} قسم
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {showModal && (
-        <BoardMemberModal
-          member={editMember}
-          onSave={handleSave}
-          onClose={() => { setShowModal(false); setEditMember(null); }}
-        />
-      )}
-      {deleteTarget && (
-        <DeleteConfirmModal
-          name={deleteTarget.name}
-          onConfirm={handleDelete}
-          onClose={() => setDeleteTarget(null)}
-        />
-      )}
-    </DashboardLayout>
+          <section className="rounded-2xl border border-[#29567c] bg-[#0b223a]/85 p-4">
+            <p className="text-xs sm:text-sm text-[#b4c7df] leading-relaxed flex items-center gap-2">
+              <ShieldCheck size={15} className="text-[#22d3ee]" />
+              هذه نسخة عرض أولية لا تغيّر قاعدة البيانات ولا تؤثر على الموظفين الحاليين.
+            </p>
+          </section>
+        </main>
+      </DashboardLayout>
+    </PageGuard>
   );
 }
